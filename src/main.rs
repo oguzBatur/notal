@@ -17,21 +17,16 @@ type Rgba = (f32, f32, f32, f32); // KMYA renk paleti - RGBA palette type
 enum Color {
     RGBA(Rgba),
 }
+
 // Main is here.
 fn main() {
     // SDL'i aç. - Turn on SDL.
     let sdl = init_sdl();
     // Pencere Yarat. - Create Window.
     let window = create_window_default(&sdl);
-
+    const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
     unsafe {
-        // OpenGL'i aç. - open OpenGL.
-        load_gl_with(|f_name| window.get_proc_address(f_name));
-        // Create simple graphic.
-        const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
-
-        const COLOR: Rgba = (0.3, 0.4, 0.5, 1.0);
-        create_vertex_graphics(VERTICES, COLOR);
+        create_triangle(VERTICES);
     }
 } // Main ends here.
 
@@ -47,6 +42,7 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
     // Cihaz'da bulunan GL özellkillerinin hepsi. - All the GL features the OS spec has.
     sdl.gl_set_attribute(SdlGlAttr::Profile, GlProfile::Core)
         .unwrap();
+
     // MacOS için özel ayarlar. - Special settings for MacOS.
     #[cfg(target_os = "macos")]
     {
@@ -63,35 +59,74 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
             WindowFlags::Shown,
         )
         .expect("pencere yaratilamadi");
-    // Program çalışmayı durdurdu probleminin oluşmasını, genel loop ile çözüyoruz. - We prevent program has stopped working issue with a main loop
+    // Renkler max 1.0 olması lazım, renk uygularken 255' e bölersek rengi alıyoruz ...
+    const BG_COLOR: Rgba = (184.0 / 255.0, 213.0 / 255.0, 238.0 / 255.0, 1.0);
+    let mut gl_elements_tuple: (GLuint, GLuint) = (0, 0);
+    unsafe {
+        load_gl_with(|f_name| win.get_proc_address(f_name));
+        const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
+        // Arkaplan buffer'ı yarat. - Create a back buffer.
+        create_opengl_buffer(BG_COLOR);
+        // Vsync'i aç. - init Vsync.
+        gl_elements_tuple = create_triangle(VERTICES);
+        win.set_swap_interval(SwapInterval::Vsync);
+        win.swap_window();
+    }
     'main_loop: loop {
         while let Some(event) = sdl.poll_events().and_then(Result::ok) {
             match event {
                 Event::Quit(_) => break 'main_loop,
                 _ => (),
             }
+            // Sürekli pencere bufferını çalıştırmamız lazım, aynı zamanda sürekli olarak çizim eyleminin gerçekleşmesi lazım.
+            unsafe {
+                glClearColor(BG_COLOR.0, BG_COLOR.1, BG_COLOR.2, BG_COLOR.3);
+                glClear(GL_COLOR_BUFFER_BIT);
+                glUseProgram(gl_elements_tuple.1);
+                glBindVertexArray(gl_elements_tuple.0);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                win.swap_window();
+            }
         }
-        win.swap_window();
     }
     win
 }
 
-// Create graphics.
-unsafe fn create_vertex_graphics(vertex: [Vertex; 3], rgba: Rgba) {
+// Grafik Yarat. -  Create graphics.
+unsafe fn create_opengl_buffer(rgba: Rgba) {
+    // viewport of openGL
+    glViewport(0, 0, 800, 600);
+    // Arka buffer (Pencere) - The back buffer
     glClearColor(rgba.0, rgba.1, rgba.2, rgba.3);
-    let mut vertical_array_object = 0;
-    glGenVertexArrays(1, &mut vertical_array_object);
-    assert_ne!(vertical_array_object, 0);
-    let mut vertical_binding_object = 0;
-    glGenBuffers(1, &mut vertical_binding_object);
-    assert_ne!(vertical_binding_object, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, vertical_binding_object);
+    // Ön buffer (Pencere) - Front Buffer
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+unsafe fn create_triangle(vertex: [Vertex; 3]) -> (GLuint, GLuint) {
+    // How do we achieve this ?
+    // Input data, output frame.
+    // Vertex Shader, Shape Assembler, Geometry Shader, Rasterization, Fragment Shader, Tests and Blending.
+
+    // İlk işlem, vertex array object (VAO) yarat. - First, create a vertex array object. (VAO)
+    let mut vao = 0;
+    glGenVertexArrays(1, &mut vao);
+    assert_ne!(vao, 0);
+    glBindVertexArray(vao);
+
+    // İkinci işlem, vertex bound object(VBO) yarat. - Second, create a vertex bound object (VBO)
+    let mut vbo = 0;
+    glGenBuffers(1, &mut vbo);
+    assert_ne!(vbo, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
     glBufferData(
         GL_ARRAY_BUFFER,
         size_of_val(&vertex) as isize,
         vertex.as_ptr().cast(),
         GL_STATIC_DRAW,
     );
+
     glVertexAttribPointer(
         0,
         3,
@@ -101,10 +136,52 @@ unsafe fn create_vertex_graphics(vertex: [Vertex; 3], rgba: Rgba) {
         0 as *const _,
     );
     glEnableVertexAttribArray(0);
-    glViewport(
-        0,
-        0,
-        DEFAULT_WINDOW_SIZE[0] as i32,
-        DEFAULT_WINDOW_SIZE[1] as i32,
+
+    // The Vertex Shader.
+    let vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    assert_ne!(vertex_shader, 0);
+    const VERT_SHADER: &str = r#"#version 330 core
+  layout (location = 0) in vec3 pos;
+      void main() {
+        gl_Position = vec4(pos.x, pos.y, pos.z, 1.0);
+          }
+    "#;
+
+    glShaderSource(
+        vertex_shader,
+        1,
+        &(VERT_SHADER.as_bytes().as_ptr().cast()),
+        &(VERT_SHADER.len().try_into().unwrap()),
     );
+    glCompileShader(vertex_shader);
+
+    // Fragment Shader.
+    let fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
+    assert_ne!(fragment_shader, 0);
+
+    const FRAG_SHADER: &str = r#"#version 330 core
+  out vec4 final_color;
+    
+      void main() {
+        final_color = vec4(1.0, 0.5, 0.2, 1.0);
+          }
+    "#;
+
+    glShaderSource(
+        fragment_shader,
+        1,
+        &(FRAG_SHADER.as_bytes().as_ptr().cast()),
+        &(FRAG_SHADER.len().try_into().unwrap()),
+    );
+    glCompileShader(fragment_shader);
+
+    let shader_program = glCreateProgram();
+
+    //Attach the shaders to the shader_program.
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, fragment_shader);
+    glLinkProgram(shader_program);
+    glDeleteShader(vertex_shader);
+    glDeleteShader(fragment_shader);
+    (vao, shader_program)
 }
