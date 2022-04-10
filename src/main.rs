@@ -4,9 +4,6 @@ use beryllium::*;
 use core::mem::*;
 use ogl33::*;
 
-//TODO Pencerenin içerisine arkaplan grafiği çiz.
-//TODO basit bir UI yarat.
-
 // Sürekli Değerler - Constant Variables.
 const DEFAULT_WINDOW_SIZE: [u32; 2] = [800, 600];
 // Types
@@ -24,10 +21,6 @@ fn main() {
     let sdl = init_sdl();
     // Pencere Yarat. - Create Window.
     let window = create_window_default(&sdl);
-    const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
-    unsafe {
-        create_triangle(VERTICES);
-    }
 } // Main ends here.
 
 fn init_sdl() -> SDL {
@@ -62,13 +55,22 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
     // Renkler max 1.0 olması lazım, renk uygularken 255' e bölersek rengi alıyoruz ...
     const BG_COLOR: Rgba = (184.0 / 255.0, 213.0 / 255.0, 238.0 / 255.0, 1.0);
     let mut gl_elements_tuple: (GLuint, GLuint) = (0, 0);
+
     unsafe {
         load_gl_with(|f_name| win.get_proc_address(f_name));
-        const VERTICES: [Vertex; 3] = [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0], [0.0, 0.5, 0.0]];
+        let vertices: [Vertex; 6] = [
+            [-0.5, -0.5 * f32::sqrt(3.0) / 3.0, 0.0],
+            [0.5, -0.5 * f32::sqrt(3.0) / 3.0, 0.0],
+            [0.0, 0.5 * f32::sqrt(3.0) * 2.0 / 3.0, 0.0],
+            [-0.5 / 2.0, 0.5 * f32::sqrt(3.0) / 6.0, 0.0],
+            [0.5 / 2.0, 0.5 * f32::sqrt(3.0) / 6.0, 0.0],
+            [0.0, -0.5 * f32::sqrt(3.0) / 6.0, 0.0],
+        ];
+
         // Arkaplan buffer'ı yarat. - Create a back buffer.
         create_opengl_buffer(BG_COLOR);
         // Vsync'i aç. - init Vsync.
-        gl_elements_tuple = create_triangle(VERTICES);
+        gl_elements_tuple = create_triangle(vertices);
         win.set_swap_interval(SwapInterval::Vsync);
         win.swap_window();
     }
@@ -78,13 +80,14 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
                 Event::Quit(_) => break 'main_loop,
                 _ => (),
             }
+
             // Sürekli pencere bufferını çalıştırmamız lazım, aynı zamanda sürekli olarak çizim eyleminin gerçekleşmesi lazım.
             unsafe {
                 glClearColor(BG_COLOR.0, BG_COLOR.1, BG_COLOR.2, BG_COLOR.3);
                 glClear(GL_COLOR_BUFFER_BIT);
                 glUseProgram(gl_elements_tuple.1);
                 glBindVertexArray(gl_elements_tuple.0);
-                glDrawArrays(GL_TRIANGLES, 0, 3);
+                glDrawElements(GL_TRIANGLES, 9, GL_UNSIGNED_INT, 0 as *const _);
                 win.swap_window();
             }
         }
@@ -102,11 +105,7 @@ unsafe fn create_opengl_buffer(rgba: Rgba) {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-unsafe fn create_triangle(vertex: [Vertex; 3]) -> (GLuint, GLuint) {
-    // How do we achieve this ?
-    // Input data, output frame.
-    // Vertex Shader, Shape Assembler, Geometry Shader, Rasterization, Fragment Shader, Tests and Blending.
-
+unsafe fn create_triangle(vertex: [Vertex; 6]) -> (GLuint, GLuint) {
     // İlk işlem, vertex array object (VAO) yarat. - First, create a vertex array object. (VAO)
     let mut vao = 0;
     glGenVertexArrays(1, &mut vao);
@@ -117,8 +116,19 @@ unsafe fn create_triangle(vertex: [Vertex; 3]) -> (GLuint, GLuint) {
     let mut vbo = 0;
     glGenBuffers(1, &mut vbo);
     assert_ne!(vbo, 0);
-
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+    // In order to create more complex shapes, we must use the Index Buffer Option
+    let indices: [[i32; 3]; 3] = [[0, 3, 5], [3, 2, 4], [5, 4, 1]];
+    let mut ebo = 0;
+    glGenBuffers(1, &mut ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(
+        GL_ELEMENT_ARRAY_BUFFER,
+        size_of_val(&indices) as isize,
+        indices.as_ptr().cast(),
+        GL_STATIC_DRAW,
+    );
 
     glBufferData(
         GL_ARRAY_BUFFER,
