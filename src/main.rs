@@ -2,15 +2,16 @@
 use beryllium::*;
 // OpenGl kütüphanesi - OpenGl library
 use core::mem::*;
-use ogl33::*;
+use gl33::global_loader::*;
+use gl33::*;
 
 // Sürekli Değerler - Constant Variables.
 const DEFAULT_WINDOW_SIZE: [u32; 2] = [800, 600];
+
 // Types
 #[warn(dead_code)]
 type Vertex = [f32; 3]; // tipik bir vertex. -  a typical vertex.
 type Rgba = (f32, f32, f32, f32); // KMYA renk paleti - RGBA palette type
-#[warn(dead_code)]
 enum Color {
     RGBA(Rgba),
 }
@@ -20,7 +21,7 @@ fn main() {
     // SDL'i aç. - Turn on SDL.
     let sdl = init_sdl();
     // Pencere Yarat. - Create Window.
-    let window = create_window_default(&sdl);
+    let _window = create_window_default(&sdl);
 } // Main ends here.
 
 fn init_sdl() -> SDL {
@@ -54,10 +55,9 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
         .expect("pencere yaratilamadi");
     // Renkler max 1.0 olması lazım, renk uygularken 255' e bölersek rengi alıyoruz ...
     const BG_COLOR: Rgba = (184.0 / 255.0, 213.0 / 255.0, 238.0 / 255.0, 1.0);
-    let mut gl_elements_tuple: (GLuint, GLuint) = (0, 0);
+    let mut gl_elements_tuple: (u8, u8) = (0, 0);
 
     unsafe {
-        load_gl_with(|f_name| win.get_proc_address(f_name));
         let vertices: [Vertex; 6] = [
             [-0.5, -0.5 * f32::sqrt(3.0) / 3.0, 0.0],
             [0.5, -0.5 * f32::sqrt(3.0) / 3.0, 0.0],
@@ -85,8 +85,8 @@ fn create_window_default(sdl: &SDL) -> GlWindow {
             unsafe {
                 glClearColor(BG_COLOR.0, BG_COLOR.1, BG_COLOR.2, BG_COLOR.3);
                 glClear(GL_COLOR_BUFFER_BIT);
-                glUseProgram(gl_elements_tuple.1);
-                glBindVertexArray(gl_elements_tuple.0);
+                glUseProgram(gl_elements_tuple.1 as u32);
+                glBindVertexArray(gl_elements_tuple.0 as u32);
                 glDrawElements(GL_TRIANGLES, 9, GL_UNSIGNED_INT, 0 as *const _);
                 win.swap_window();
             }
@@ -105,7 +105,7 @@ unsafe fn create_opengl_buffer(rgba: Rgba) {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-unsafe fn create_triangle(vertex: [Vertex; 6]) -> (GLuint, GLuint) {
+unsafe fn create_triangle(vertex: [Vertex; 6]) -> (u8, u8) {
     // İlk işlem, vertex array object (VAO) yarat. - First, create a vertex array object. (VAO)
     let mut vao = 0;
     glGenVertexArrays(1, &mut vao);
@@ -139,9 +139,9 @@ unsafe fn create_triangle(vertex: [Vertex; 6]) -> (GLuint, GLuint) {
 
     glVertexAttribPointer(
         0,
-        3,
+        6,
         GL_FLOAT,
-        GL_FALSE,
+        0,
         size_of::<Vertex>().try_into().unwrap(),
         0 as *const _,
     );
@@ -193,5 +193,8 @@ unsafe fn create_triangle(vertex: [Vertex; 6]) -> (GLuint, GLuint) {
     glLinkProgram(shader_program);
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
-    (vao, shader_program)
+    (vao as u8, shader_program as u8)
 }
+
+// Create a shader.
+fn create_shader(vertex_shader: &str, fragment_shader: &str) {}
