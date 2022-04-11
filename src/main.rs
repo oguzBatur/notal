@@ -5,6 +5,10 @@ use core::mem::*;
 use gl33::global_loader::*;
 use gl33::*;
 
+// Local crates.
+mod inputs;
+mod markdown;
+
 // Sürekli Değerler - Constant Variables.
 const DEFAULT_WINDOW_SIZE: [u32; 2] = [800, 600];
 
@@ -18,6 +22,7 @@ enum Color {
 
 // Main is here.
 fn main() {
+    inputs::take_continous_input();
     // SDL'i aç. - Turn on SDL.
     let sdl = init_sdl();
     // Pencere Yarat. - Create Window.
