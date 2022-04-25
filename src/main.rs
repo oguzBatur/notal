@@ -5,7 +5,9 @@ use gl33::*;
 mod inputs;
 mod markdown;
 //TODO küçük soyutlamalar ile ilerle.
-//TODO girdi ve çıktı mantığını çöz ve bunda istediğini aldıktan sonra opengl'e geç.
+//TODO çizme eylemihni gerçekleştir.
+//TODO shader yarat.
+//TODO Belki GUI kullanırık ama.
 const BG_COLOR: (f32, f32, f32, f32) = (184.0 / 255.0, 213.0 / 255.0, 238.0 / 255.0, 1.0);
 // Main is here.
 fn main() {
