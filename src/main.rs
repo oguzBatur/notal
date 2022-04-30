@@ -3,4 +3,6 @@ mod inputs;
 mod markdown;
 mod windows;
 
-fn main() {}
+fn main() {
+    windows::run();
+}
