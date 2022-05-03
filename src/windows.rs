@@ -10,7 +10,6 @@ pub fn run() {
     env_logger::init();
     let event_loop = EventLoop::new(); // Creata a new EventLoop for the window.
     let window = WindowBuilder::new().build(&event_loop).unwrap(); // Create a new window, and attach the event loop into it.
-
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
@@ -40,9 +39,8 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 }
-// Durum implementasyonları// Durum implementasyonları.
+
 impl State {
-    // Asenktron fonksiyon ile, thread'i meşgul etmiyoruz.
     async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
@@ -59,6 +57,39 @@ impl State {
             })
             .await
             .unwrap();
+
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    features: wgpu::Features::empty(),
+                    limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    label: None,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface.get_preferred_format(&adapter).unwrap(),
+            width: size.width,
+            height: size.height,
+            present_mode: wgpu::PresentMode::Fifo,
+        };
+        surface.configure(&device, &config);
+
+        Self {
+            surface,
+            device,
+            queue,
+            config,
+            size,
+        }
     }
 
     // Pencereyi boyutlandır.
