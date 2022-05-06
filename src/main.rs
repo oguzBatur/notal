@@ -1,8 +1,9 @@
+use pollster;
 // Local crates.
 mod inputs;
 mod markdown;
 mod windows;
-
+use windows::run;
 fn main() {
-    windows::run();
+    pollster::block_on(run());
 }
