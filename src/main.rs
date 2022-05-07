@@ -1,4 +1,3 @@
-use pollster;
 // Local crates.
 mod inputs;
 mod markdown;

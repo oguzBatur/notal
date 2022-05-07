@@ -1,11 +1,11 @@
 use env_logger;
+use wgpu::include_wgsl;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
-use wgpu::include_wgsl;
 // create and run a window.
 pub async fn run() {
     env_logger::init();
@@ -16,17 +16,6 @@ pub async fn run() {
 
     event_loop.run(move |event, _, control_flow| match event {
         // closure içerisindeki  event değişkenini kontrol et.
-        Event::RedrawRequested(window_id) if window_id == window.id() => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                    state.resize(state.size)
-                }
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface Timeout."),
-            }
-        }
         Event::WindowEvent {
             // Eğer Event == WindowEvent, o zaman WindowEvent ile alakalı işlemleri gör.
             ref event,
@@ -58,8 +47,21 @@ pub async fn run() {
                 }
             }
         }
+        Event::RedrawRequested(window_id) if window_id == window.id() => {
+            state.update();
+            match state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                    state.resize(state.size)
+                }
+
+                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface Timeout."),
+            }
+        }
         Event::MainEventsCleared => {
-            window.request_redraw();
+            // RedrawRequested eventi, kendimiz trigger etmedikçe, sadece bir kere döner, o yüzdez window.request_redraw() fonkisyonu çalıştırılır.
+            window.request_redraw(); //* Eger event tree boş ise, Event::RedrawRequested eventini döndür.(Pencereyi yeniden çiz.) *//
         }
         _ => {}
     });
@@ -79,15 +81,14 @@ struct State {
 impl State {
     async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-
         // Ekran kartı ile uğraşmak adına bir instance yaratıyoruz.
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
-        // Burada, backends'i all yaparak, üretilecek uygulamanın cross-platfoırm olduğunu belirtiyoruz.
+        // Burada, backends'i all yaparak, üretilecek uygulamanın cross-platform olduğunu belirtiyoruz.
         let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(window) };
+        let surface = unsafe { instance.create_surface(window) }; //* Boş pencerenin üzerine bir surface yarat *//
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -189,7 +190,9 @@ impl State {
         false
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        // Add implementation
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -209,9 +212,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
+                            r: 0.5,
                             g: 0.2,
-                            b: 0.3,
+                            b: 0.1,
                             a: 1.0,
                         }),
                         store: true,
