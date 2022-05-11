@@ -3,12 +3,12 @@ use druid::widget::{
     Painter,
 };
 use druid::{
-    theme, AppDelegate, Color, Data, Env, FileDialogOptions, FileInfo, FileSpec, ImageBuf, Insets,
-    Lens, Selector, UnitPoint, Widget, WidgetExt, WindowHandle,
+    text::RichText, theme, AppDelegate, Color, Data, Env, FileDialogOptions, FileInfo, FileSpec,
+    ImageBuf, Insets, Lens, Selector, UnitPoint, Widget, WidgetExt, WindowHandle,
 };
 
 //* Event Handler */
-pub fn notal_greeter_ui() -> impl Widget<String> {
+pub fn notal_greeter_ui() -> impl Widget<NotalAppState> {
     //* Dosya Seçme Eyleminde, desteklenen dosya tipleri için ürettiğimiz değerler. */
     let defaut_save_name = String::from("benim_dosyam");
     let text_file_spec = FileSpec::new("Text Dosyaları", &["txt"]);
@@ -23,8 +23,8 @@ pub fn notal_greeter_ui() -> impl Widget<String> {
     //* Implementasyon buraya */
     //? Programımızın girişinde logomuzu, dosya açıcımızı görmemiz tatlı olur.
     //TODO Label widgeti yarat.
-    let greeter_label: Label<String> =
-        Label::new(|_data: &String, _env: &Env| format!("Notal'a Hoşgeldin"));
+    let greeter_label: Label<NotalAppState> =
+        Label::new(|_data: &NotalAppState, _env: &Env| format!("Notal'a Hoşgeldin"));
     //TODO Image widgeti yarat.
     let new_file_button = create_default_notal_button("Yeni Dosya");
     let open_file_button = create_default_notal_button("Dosya Aç").on_click(move |ctx, _, _| {
@@ -51,8 +51,8 @@ struct NotalButton {
 }
 
 //* Genel Notal tuşu üret */
-fn create_default_notal_button(text: &str) -> Container<String> {
-    let painter: Painter<String> = Painter::new(|ctx, _, env| {
+fn create_default_notal_button(text: &str) -> Container<NotalAppState> {
+    let painter: Painter<NotalAppState> = Painter::new(|ctx, _, env| {
         let bounds = ctx.size().to_rect();
         ctx.fill(bounds, &env.get(theme::PRIMARY_DARK));
         if ctx.is_hot() {
@@ -77,8 +77,17 @@ pub struct GreeterState {
     pub new_file_name: String,
 }
 
+//* Uygulamamızın içerisindeki değerleri manipüle etmek ve görmek için, ortak bir struct yaratıyoruz. */
 #[derive(Clone, Data, Lens)]
-struct FileOpener {}
+pub struct NotalAppState {
+    pub file_state: FileState,
+}
 
 #[derive(Clone, Data, Lens)]
-pub struct WindowMenu {}
+pub struct FileState {
+    pub file_modified: bool,
+    pub current_file_contents: String,
+    pub file_opened: bool,
+    pub raw: String,
+    pub rendered: RichText,
+}

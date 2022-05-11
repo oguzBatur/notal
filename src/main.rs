@@ -2,7 +2,9 @@
 mod greeter_ui;
 mod inputs;
 mod markdown;
-use greeter_ui::notal_greeter_ui;
+use std::sync::Arc;
+
+use greeter_ui::{notal_greeter_ui, FileState, NotalAppState};
 mod windows;
 use druid::{
     text::RichText, AppDelegate, AppLauncher, Data, Env, Lens, LocalizedString, WindowDesc,
@@ -13,15 +15,15 @@ fn main() {
         .window_size((800.0, 600.0));
     //* Başlangıç durumu */
     let initial_state = NotalAppState {
-        file_state: FileState{
+        file_state: FileState {
             current_file_contents: "".to_string(),
             file_modified: false,
             file_opened: false,
-            new_file_contents: "".to_string(),
             raw: "".to_string(),
-        }
+            rendered: RichText::new(Arc::new("")),
+        },
+    };
 
-    } 
     AppLauncher::with_window(main_window)
         .delegate(Delegate)
         .use_simple_logger()
@@ -31,22 +33,6 @@ fn main() {
 
 //* Uygulama Başlığı. */
 const WINDOW_TITLE: LocalizedString<NotalAppState> = LocalizedString::new("Notal");
-
-//* Uygulamamızın içerisindeki değerleri manipüle etmek ve görmek için, ortak bir struct yaratıyoruz. */
-#[derive(Clone, Data, Lens)]
-struct NotalAppState {
-    file_state: FileState,
-}
-
-#[derive(Clone, Data, Lens)]
-struct FileState {
-    file_modified: bool,
-    current_file_contents: String,
-    new_file_contents: String,
-    file_opened: bool,
-    raw: String,
-    rendered: RichText,
-}
 
 //* Uygulama içindeki pencere eventlerini delegate denilen struct üzerinde, AppDelegate implementasyonu ile halledicez. */
 struct Delegate;
@@ -73,7 +59,7 @@ impl AppDelegate<NotalAppState> for Delegate {
                 Ok(s) => {
                     println!("File has been opened");
                     //TODO şu küçük sıkıntıyı çöz
-                    *data.file_state.new_file_contents = s.to_owned();
+                    data.file_state.current_file_contents = s.to_owned();
                 }
                 Err(e) => {
                     println!("Error opening file {}", e);
