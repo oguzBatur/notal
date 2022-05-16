@@ -108,6 +108,7 @@ impl Application for NotalApp {
                 .width(iced::Length::Fill)
                 .into(),
             NotalApp::Loaded(panes) => {
+                panes.view()
                 todo!();
             }
         }
