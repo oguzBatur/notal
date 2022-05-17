@@ -1,6 +1,6 @@
 use iced::{
     button,
-    pane_grid::{self},
+    pane_grid::{self, Axis},
     window::{self},
     Application, Button, Column, Container, Element, Font, Padding, PaneGrid, Row, Settings, Svg,
     Text,
@@ -107,10 +107,10 @@ impl Application for NotalApp {
                 .height(iced::Length::Fill)
                 .width(iced::Length::Fill)
                 .into(),
-            NotalApp::Loaded(panes) => {
-                panes.view()
-                todo!();
-            }
+            NotalApp::Loaded(panes) => Container::new(panes.view().map(Message::PaneMessage))
+                .width(iced::Length::Fill)
+                .height(iced::Length::Fill)
+                .into(),
         }
     }
 }
@@ -226,7 +226,8 @@ pub enum PaneState {
     Split(pane_grid::Axis, pane_grid::Pane),
     SplitFocused(pane_grid::Axis),
     Clicked(pane_grid::Pane),
-    Resized(pane_grid::ResizeEvent),
+    FileTreeResized(pane_grid::ResizeEvent),
+    TextBufferResized(pane_grid::ResizeEvent),
     Close(pane_grid::Pane),
 }
 /// Initilize panes when mainmenu is closed.
@@ -235,17 +236,28 @@ pub struct Panes {
     textbuffer_pane_state: pane_grid::State<TextBuffer>,
     filetree_pane: pane_grid::Pane,
     textbuffer_pane: pane_grid::Pane,
+    pane_states: pane_grid::State<Pane>,
+    pane_grid: pane_grid::Pane,
 }
-struct FileTree {
+#[derive(Debug, Clone)]
+pub struct FileTree {
     folder_path: PathBuf,
     dictionary_state: button::State,
     dictionary_terms: Option<Vec<DictionaryItem>>,
 }
+
+#[derive(Debug, Clone)]
+pub enum Pane {
+    FileTreePane(FileTree),
+    TextBufferPane(TextBuffer),
+}
+
 #[derive(Debug, Clone)]
 pub enum FileTreeMessage {
     OpenFile(PathBuf),
     OpenDictionary(PathBuf),
     DictionaryTermSelected(DictionaryItem),
+    TextBufferMessage(TextBufferMessage),
 }
 ///  A str type used to define terms <br> Terimleri  anlatmak için kullandığımız bir str türü.
 type Term = String;
@@ -256,6 +268,8 @@ type DictionaryItem = (Term, Description);
 
 impl<'a> FileTree {
     fn new(path: PathBuf, dictionary_terms: Option<Vec<DictionaryItem>>) -> Self {
+        let text_buffer_new = TextBuffer::new(path.clone());
+        let text_buffer = pane_grid::State::new(text_buffer_new);
         FileTree {
             folder_path: path,
             dictionary_state: button::State::new(),
@@ -277,10 +291,23 @@ impl<'a> FileTree {
                 .horizontal_alignment(iced::alignment::Horizontal::Center)
                 .vertical_alignment(iced::alignment::Vertical::Center),
         )
+        .style(style::Button::Primary)
         .on_press(FileTreeMessage::OpenDictionary(self.folder_path.clone()));
         let file_label = Text::new("file name goes here.");
+        let column = Column::new()
+            .push(dictionary_button)
+            .push(file_label)
+            .padding(20)
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+            .spacing(10)
+            .align_items(iced::Alignment::Center);
 
-        todo!()
+        Container::new(column)
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+            .style(style::Pane::FileTreePane(style::PaneState::Active))
+            .into()
     }
 }
 /// Commands for the FileDialog Opener.
@@ -341,11 +368,13 @@ pub enum TextBufferMessage {
     NewInputEntry(String),
     ChangeFileRequested(PathBuf),
 }
+#[derive(Debug, Clone)]
 pub struct TextBuffer {
     input_line: String,
     file_contents: String,
     file_path: PathBuf,
 }
+
 impl<'a> TextBuffer {
     fn new(path: PathBuf) -> Self {
         Self {
@@ -366,21 +395,29 @@ impl<'a> TextBuffer {
         }
     }
     fn view(&mut self) -> Element<TextBufferMessage> {
-        Column::new().push(Text::new("The Text BUffer")).into()
+        Container::new(Text::new("The Text Buffer"))
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
+            .style(style::Pane::TextBufferPane(style::PaneState::Active))
+            .into()
     }
 }
 
 impl<'a> Panes {
     fn new(path: PathBuf) -> Self {
         let filetree = FileTree::new(path.clone(), None);
-        let textbuffer = TextBuffer::new(path);
+        let textbuffer = TextBuffer::new(path.clone());
+        let pane = pane_grid::State::new(Pane::FileTreePane(FileTree::new(path, None)));
         let filetree = pane_grid::State::new(filetree);
         let textbuffer = pane_grid::State::new(textbuffer);
+        PaneState::Split(Axis::Vertical, pane.1.clone());
         Self {
             filetree_pane_state: filetree.0,
             textbuffer_pane_state: textbuffer.0,
             filetree_pane: filetree.1,
             textbuffer_pane: textbuffer.1,
+            pane_grid: pane.1,
+            pane_states: pane.0,
         }
     }
     fn update(&mut self, msg: PaneState) {
@@ -397,31 +434,66 @@ impl<'a> Panes {
                 .unwrap()
                 .update(file_msg),
 
+            PaneState::FileTreeResized(pane_grid::ResizeEvent { ratio, split }) => {
+                self.pane_states.resize(&split, ratio);
+            }
+            PaneState::Split(axis, pane) => {
+                let main_pane = self.pane_states.get_mut(&self.pane_grid).unwrap();
+                match main_pane {
+                    Pane::FileTreePane(file_tree_pane) => {
+                        self.pane_states.split(
+                            axis,
+                            &pane,
+                            Pane::TextBufferPane(TextBuffer::new(PathBuf::new())),
+                        );
+                    }
+                    _ => (),
+                }
+            }
+
             _ => (),
         }
     }
-    fn view(&mut self, file_tree_pane: iced::pane_grid::Pane) -> Element<PaneState> {
+    fn view(&mut self) -> Element<PaneState> {
         // Lets create a filetree pane first.
-        let file_tree_pane_grid =
-            PaneGrid::new(&mut self.filetree_pane_state, |pane, file_tree| {
-                file_tree.view(pane).map(PaneState::FileTreeMessage).into()
-            });
+        let pane_grid = PaneGrid::new(&mut self.pane_states, |pane, panes| match panes {
+            Pane::FileTreePane(file_tree) => {
+                pane_grid::Content::new(file_tree.view(pane).map(PaneState::FileTreeMessage)).into()
+            }
+            Pane::TextBufferPane(text_buffer) => {
+                pane_grid::Content::new(text_buffer.view().map(PaneState::TextBufferMessage)).into()
+            }
+        })
+        .on_resize(10, PaneState::FileTreeResized)
+        .height(iced::Length::Fill)
+        .width(iced::Length::Units(200));
+
         let text_buffer_pane_grid =
             PaneGrid::new(&mut self.textbuffer_pane_state, |pane, text_buffer| {
-                text_buffer.view().map(PaneState::TextBufferMessage).into()
-            });
-        Column::new()
-            .push(file_tree_pane_grid)
-            .push(text_buffer_pane_grid)
+                let title_bar = pane_grid::TitleBar::new(Text::new("Dosya adı buraya.").size(14))
+                    .padding(2)
+                    .style(style::TitleBar::Active);
+                pane_grid::Content::new(text_buffer.view().map(PaneState::TextBufferMessage))
+                    .title_bar(title_bar)
+                    .into()
+            })
+            .on_resize(10, PaneState::FileTreeResized)
+            .height(iced::Length::Fill)
+            .width(iced::Length::Fill);
+
+        Row::new()
+            .push(pane_grid)
+            .width(iced::Length::Fill)
+            .height(iced::Length::Fill)
             .into()
     }
 }
 
-/// A simple styling library taken from the exaples. <br>
+/// A simple styling library taken from the examples. <br>
 ///  Provides styling for **Button, Pane**.
 mod style {
     use iced::button;
-    use iced::{pane_grid, Background, Color, Vector};
+    use iced::{container, Background, Color, Vector};
 
     /// Generic style of a Notal button.
     pub enum Button {
@@ -430,35 +502,91 @@ mod style {
     }
 
     pub enum Pane {
-        TextBufferPane,
-        FileTreePane,
+        TextBufferPane(PaneState),
+        FileTreePane(PaneState),
     }
-    impl pane_grid::StyleSheet for Pane {
-        fn hovered_split(&self) -> Option<pane_grid::Line> {
-            self.hovered_split()
-        }
-        fn picked_split(&self) -> Option<pane_grid::Line> {
+    pub enum PaneState {
+        Active,
+        Focused,
+    }
+    //*  Default file tree pane colors. */
+    const FILE_TREE_PANE_ACTIVE_COLOR: Color =
+        Color::from_rgb(163.0 / 255.0, 213.0 / 255.0, 172.0 / 255.0);
+    const FILE_TREE_PANE_FOCUSED_COLOR: Color =
+        Color::from_rgb(255.0 / 28.0, 255.0 / 151.0, 255.0 / 109.0);
+
+    pub enum TitleBar {
+        Active,
+        Focused,
+    }
+    impl container::StyleSheet for TitleBar {
+        fn style(&self) -> container::Style {
             match self {
-                Pane::TextBufferPane => Some(pane_grid::Line {
-                    color: Color::WHITE,
-                    width: 800.0,
-                }),
-                Pane::FileTreePane => Some(pane_grid::Line {
-                    color: Color::from_rgb8(163, 213, 172),
-                    width: 200.0,
-                }),
+                TitleBar::Active => container::Style {
+                    text_color: Some(Color::WHITE),
+                    background: Some(Background::Color(FILE_TREE_PANE_ACTIVE_COLOR)),
+                    ..Default::default()
+                },
+                TitleBar::Focused => container::Style {
+                    text_color: Some(Color::WHITE),
+                    background: Some(Background::Color(FILE_TREE_PANE_FOCUSED_COLOR)),
+                    ..Default::default()
+                },
             }
         }
     }
+    //* Style sheet for panes. */
+    impl container::StyleSheet for Pane {
+        fn style(&self) -> container::Style {
+            match self {
+                Pane::FileTreePane(pane_state) => match pane_state {
+                    PaneState::Active => container::Style {
+                        background: Some(Background::Color(FILE_TREE_PANE_ACTIVE_COLOR)),
+                        border_color: Color::BLACK,
+                        border_radius: 0.0,
+                        border_width: 2.0,
+                        text_color: Some(DEFAULT_BLUE_COLOR),
+                    },
+                    PaneState::Focused => container::Style {
+                        background: Some(Background::Color(FILE_TREE_PANE_FOCUSED_COLOR)),
+                        border_color: Color::BLACK,
+                        border_radius: 0.0,
+                        border_width: 2.0,
+                        text_color: Some(DEFAULT_BLUE_COLOR),
+                    },
+                },
+                Pane::TextBufferPane(pane_state) => match pane_state {
+                    PaneState::Active => container::Style {
+                        background: Some(Background::Color(Color::WHITE)),
+                        border_color: DEFAULT_GREEN_COLOR,
+                        border_radius: 0.0,
+                        border_width: 2.0,
+                        text_color: Some(Color::from_rgb8(10, 10, 10)),
+                    },
+                    PaneState::Focused => container::Style {
+                        background: Some(Background::Color(Color::from_rgb8(250, 250, 250))),
+                        border_color: DEFAULT_BLUE_COLOR,
+                        border_radius: 0.0,
+                        border_width: 2.0,
+                        text_color: Some(Color::BLACK),
+                    },
+                },
+            }
+        }
+    }
+
+    //* Default Colors for Notal. */
+    const DEFAULT_BLUE_COLOR: Color = Color::from_rgb(0.11, 0.42, 0.87);
+    const DEFAULT_GREEN_COLOR: Color = Color::from_rgb(0.5, 0.5, 0.5);
 
     impl button::StyleSheet for Button {
         fn active(&self) -> button::Style {
             button::Style {
                 background: Some(Background::Color(match self {
-                    Button::Primary => Color::from_rgb(0.11, 0.42, 0.87),
-                    Button::Secondary => Color::from_rgb(0.5, 0.5, 0.5),
+                    Button::Primary => DEFAULT_BLUE_COLOR,
+                    Button::Secondary => DEFAULT_GREEN_COLOR,
                 })),
-                border_radius: 12.0,
+                border_radius: 2.0,
                 shadow_offset: Vector::new(1.0, 1.0),
                 text_color: Color::from_rgb8(0xEE, 0xEE, 0xEE),
 
