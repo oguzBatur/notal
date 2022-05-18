@@ -1,12 +1,11 @@
 use iced::{
-    button,
-    pane_grid::{self, Axis},
-    window::{self},
-    Application, Button, Column, Container, Element, Font, Padding, PaneGrid, Row, Settings, Svg,
-    Text,
+    button, window, Application, Button, Column, Container, Element, Font, Padding, Row, Settings,
+    Svg, Text, TextInput,
 };
+use ropey;
+
 use native_dialog::FileDialog;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 pub fn main() -> iced::Result {
     let external_font = include_bytes!("../fonts/static/Inter-Medium.ttf");
     NotalApp::run(Settings {
@@ -43,6 +42,7 @@ pub enum NotalApp {
 
 /// Mesajlar, update fonksiyonlarında kontrol edilir ve buna göre işlem yapılır
 /// Mesajlar, ui elementlerinin içerisinde kullanılabilir. butona basıldığında şu mesajı yolla gibi.
+/// Dene Yapmak iyidir bilirsin
 #[derive(Debug, Clone)]
 pub enum Message {
     OpenBuffer, //* Burada, uygulamada, yüklü bir dosya varmı yokmu o belli olacak., Loaderror, bize FileDialogState'i vermeli.
@@ -81,24 +81,22 @@ impl Application for NotalApp {
                     if let MainMenuMessage::OpenFilePressed = &main_msg {
                         if menu.file_path.exists() {
                             println!("{:?}", &menu.file_path);
-                            *self = NotalApp::Loaded(Panes::new(menu.file_path.clone()));
+                            *self = NotalApp::Loaded(Panes::new(menu.file_path.clone(), None));
                         }
                     }
                 }
                 _ => (),
             },
-            NotalApp::Loaded(panes) => match message {
+            NotalApp::Loaded(pane) => match message {
                 Message::PaneMessage(pane_msg) => {
-                    panes.update(pane_msg);
+                    pane.update(pane_msg);
                 }
                 _ => (),
             },
-            _ => (),
         }
         iced::Command::none()
     }
     fn view(&mut self) -> iced::Element<'_, Self::Message> {
-        println!("Opened the main menu.");
         match self {
             //* Bir problem çözüldü. Anlaşılan, Mesajlari birbirine chainlememiz gerekiyor, ve view içerisinde kullanılacak custom widget'in view komutunun kullanılması gerekiyor  */
             NotalApp::Loading(menu) => Column::new()
@@ -223,33 +221,18 @@ enum LoadError {
 pub enum PaneState {
     TextBufferMessage(TextBufferMessage),
     FileTreeMessage(FileTreeMessage),
-    Split(pane_grid::Axis, pane_grid::Pane),
-    SplitFocused(pane_grid::Axis),
-    Clicked(pane_grid::Pane),
-    FileTreeResized(pane_grid::ResizeEvent),
-    TextBufferResized(pane_grid::ResizeEvent),
-    Close(pane_grid::Pane),
 }
 /// Initilize panes when mainmenu is closed.
 pub struct Panes {
-    filetree_pane_state: pane_grid::State<FileTree>,
-    textbuffer_pane_state: pane_grid::State<TextBuffer>,
-    filetree_pane: pane_grid::Pane,
-    textbuffer_pane: pane_grid::Pane,
-    pane_states: pane_grid::State<Pane>,
-    pane_grid: pane_grid::Pane,
+    file_tree: FileTree,
+    text_buffer: TextBuffer,
 }
+
 #[derive(Debug, Clone)]
 pub struct FileTree {
     folder_path: PathBuf,
     dictionary_state: button::State,
     dictionary_terms: Option<Vec<DictionaryItem>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Pane {
-    FileTreePane(FileTree),
-    TextBufferPane(TextBuffer),
 }
 
 #[derive(Debug, Clone)]
@@ -268,8 +251,6 @@ type DictionaryItem = (Term, Description);
 
 impl<'a> FileTree {
     fn new(path: PathBuf, dictionary_terms: Option<Vec<DictionaryItem>>) -> Self {
-        let text_buffer_new = TextBuffer::new(path.clone());
-        let text_buffer = pane_grid::State::new(text_buffer_new);
         FileTree {
             folder_path: path,
             dictionary_state: button::State::new(),
@@ -283,7 +264,7 @@ impl<'a> FileTree {
         todo!();
     }
 
-    fn view(&mut self, pane: iced::pane_grid::Pane) -> Element<FileTreeMessage> {
+    fn view(&mut self) -> Element<FileTreeMessage> {
         //* The Dictionary Button. - Kütüphane Butonu. */
         let dictionary_button: Button<FileTreeMessage> = Button::new(
             &mut self.dictionary_state,
@@ -370,121 +351,74 @@ pub enum TextBufferMessage {
 }
 #[derive(Debug, Clone)]
 pub struct TextBuffer {
-    input_line: String,
+    input_state: iced::text_input::State,
+    input_value: String,
     file_contents: String,
     file_path: PathBuf,
 }
 
 impl<'a> TextBuffer {
     fn new(path: PathBuf) -> Self {
+        let file = fs::read_to_string(path.clone()).unwrap();
         Self {
-            input_line: "".to_string(),
-            file_contents: "".to_string(),
+            input_state: iced::text_input::State::new(),
+            file_contents: file,
             file_path: path,
+            input_value: String::from(""),
         }
     }
 
     fn update(&mut self, msg: TextBufferMessage) {
         match msg {
-            TextBufferMessage::NewInputEntry(new_input) => {
-                self.input_line = new_input;
-            }
             TextBufferMessage::ChangeFileRequested(path) => {
                 self.file_path = path;
             }
+            _ => (),
         }
     }
     fn view(&mut self) -> Element<TextBufferMessage> {
-        Container::new(Text::new("The Text Buffer"))
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
-            .style(style::Pane::TextBufferPane(style::PaneState::Active))
-            .into()
+        Container::new(TextInput::new(
+            &mut self.input_state,
+            self.file_contents.as_str(),
+            self.input_value.as_str(),
+            TextBufferMessage::NewInputEntry,
+        ))
+        .width(iced::Length::Fill)
+        .height(iced::Length::Fill)
+        .style(style::Pane::TextBufferPane(style::PaneState::Active))
+        .into()
     }
 }
 
 impl<'a> Panes {
-    fn new(path: PathBuf) -> Self {
-        let filetree = FileTree::new(path.clone(), None);
-        let textbuffer = TextBuffer::new(path.clone());
-        let pane = pane_grid::State::new(Pane::FileTreePane(FileTree::new(path, None)));
-        let filetree = pane_grid::State::new(filetree);
-        let textbuffer = pane_grid::State::new(textbuffer);
-        PaneState::Split(Axis::Vertical, pane.1.clone());
+    fn new(path: PathBuf, dict: Option<Vec<DictionaryItem>>) -> Self {
         Self {
-            filetree_pane_state: filetree.0,
-            textbuffer_pane_state: textbuffer.0,
-            filetree_pane: filetree.1,
-            textbuffer_pane: textbuffer.1,
-            pane_grid: pane.1,
-            pane_states: pane.0,
+            file_tree: FileTree::new(path.clone(), dict),
+            text_buffer: TextBuffer::new(path),
         }
     }
     fn update(&mut self, msg: PaneState) {
         match msg {
-            PaneState::TextBufferMessage(txt_msg) => {
-                self.textbuffer_pane_state
-                    .get_mut(&self.textbuffer_pane)
-                    .unwrap()
-                    .update(txt_msg);
+            PaneState::FileTreeMessage(file_msg) => {
+                self.file_tree.update(file_msg);
             }
-            PaneState::FileTreeMessage(file_msg) => self
-                .filetree_pane_state
-                .get_mut(&self.filetree_pane)
-                .unwrap()
-                .update(file_msg),
-
-            PaneState::FileTreeResized(pane_grid::ResizeEvent { ratio, split }) => {
-                self.pane_states.resize(&split, ratio);
+            PaneState::TextBufferMessage(text_msg) => {
+                self.text_buffer.update(text_msg);
             }
-            PaneState::Split(axis, pane) => {
-                let main_pane = self.pane_states.get_mut(&self.pane_grid).unwrap();
-                match main_pane {
-                    Pane::FileTreePane(file_tree_pane) => {
-                        self.pane_states.split(
-                            axis,
-                            &pane,
-                            Pane::TextBufferPane(TextBuffer::new(PathBuf::new())),
-                        );
-                    }
-                    _ => (),
-                }
-            }
-
-            _ => (),
         }
     }
     fn view(&mut self) -> Element<PaneState> {
-        // Lets create a filetree pane first.
-        let pane_grid = PaneGrid::new(&mut self.pane_states, |pane, panes| match panes {
-            Pane::FileTreePane(file_tree) => {
-                pane_grid::Content::new(file_tree.view(pane).map(PaneState::FileTreeMessage)).into()
-            }
-            Pane::TextBufferPane(text_buffer) => {
-                pane_grid::Content::new(text_buffer.view().map(PaneState::TextBufferMessage)).into()
-            }
-        })
-        .on_resize(10, PaneState::FileTreeResized)
-        .height(iced::Length::Fill)
-        .width(iced::Length::Units(200));
-
-        let text_buffer_pane_grid =
-            PaneGrid::new(&mut self.textbuffer_pane_state, |pane, text_buffer| {
-                let title_bar = pane_grid::TitleBar::new(Text::new("Dosya adı buraya.").size(14))
-                    .padding(2)
-                    .style(style::TitleBar::Active);
-                pane_grid::Content::new(text_buffer.view().map(PaneState::TextBufferMessage))
-                    .title_bar(title_bar)
-                    .into()
-            })
-            .on_resize(10, PaneState::FileTreeResized)
-            .height(iced::Length::Fill)
-            .width(iced::Length::Fill);
-
+        let file_tree_container =
+            Container::new(self.file_tree.view().map(PaneState::FileTreeMessage))
+                .width(iced::Length::FillPortion(1))
+                .height(iced::Length::Fill);
+        let text_buffer_container =
+            Container::new(self.text_buffer.view().map(PaneState::TextBufferMessage))
+                .width(iced::Length::FillPortion(3))
+                .height(iced::Length::Fill);
         Row::new()
-            .push(pane_grid)
-            .width(iced::Length::Fill)
-            .height(iced::Length::Fill)
+            .push(file_tree_container)
+            .push(text_buffer_container)
             .into()
     }
 }
@@ -544,14 +478,14 @@ mod style {
                         background: Some(Background::Color(FILE_TREE_PANE_ACTIVE_COLOR)),
                         border_color: Color::BLACK,
                         border_radius: 0.0,
-                        border_width: 2.0,
+                        border_width: 1.0,
                         text_color: Some(DEFAULT_BLUE_COLOR),
                     },
                     PaneState::Focused => container::Style {
                         background: Some(Background::Color(FILE_TREE_PANE_FOCUSED_COLOR)),
                         border_color: Color::BLACK,
                         border_radius: 0.0,
-                        border_width: 2.0,
+                        border_width: 1.0,
                         text_color: Some(DEFAULT_BLUE_COLOR),
                     },
                 },
