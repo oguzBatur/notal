@@ -4,23 +4,39 @@ mod menu;
 mod text_buffer;
 use druid::{
     widget::{Button, Flex, Label},
-    AppDelegate, AppLauncher, Widget,LocalizedString, PlatformError WidgetExt, WindowDesc, Data, Lens,
+    AppDelegate, AppLauncher, Data, Lens, LocalizedString, PlatformError, Widget, WidgetExt,
+    WindowDesc,
 };
-fn main() -> Result<(), PlatformError> {
-    AppLauncher::with_window(WindowDesc::new(root_builder())).launch(())?;
-    Ok(())
+fn main() {
+    let window: WindowDesc<GeneralState> = WindowDesc::new(root_builder);
+    let initial_state = GeneralState::new();
+    AppLauncher::with_window(window)
+        .launch(initial_state)
+        .expect("Error occured.");
 }
 
 fn root_builder() -> impl Widget<GeneralState> {
-    let text:LocalizedString<_> = LocalizedString::new("Hello World");
-    Label::new(text)
+    let text: LocalizedString<GeneralState> = LocalizedString::new("Hello World");
+    let label: Label<GeneralState> = Label::new(text);
+    return label;
 }
 
 #[derive(Data, Lens, Clone)]
-struct GeneralState{
-    file_path: String,
-    file_content: String,
-    file_name: String
+struct GeneralState {
+    file_path: Option<String>,
+    file_content: Option<String>,
+    file_name: Option<String>,
+    is_on_menu: bool,
+}
+impl GeneralState {
+    fn new() -> Self {
+        Self {
+            is_on_menu: true,
+            file_content: None,
+            file_name: None,
+            file_path: None,
+        }
+    }
 }
 
 // Druid works like this,
