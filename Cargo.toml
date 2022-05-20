@@ -15,9 +15,7 @@ native-dialog = "0.6.3"
 pollster = "0.2.4"
 bytemuck = { version = "1.4", features = ["derive"] }
 ropey = "1.0.0"
-[dependencies.iced]
-version = "0.4.2"
-features = ["svg"]
+druid = "0.7.0"
 
 [dependencies.image]
 version = "0.24"
