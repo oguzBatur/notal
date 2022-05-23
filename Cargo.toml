@@ -19,7 +19,7 @@ pulldown-cmark = "0.7.0"
 
 [dependencies.druid]
 git = "https://github.com/linebender/druid.git"
-features = ["image-all", "default"]
+features = ["image-all", "default", "im"]
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

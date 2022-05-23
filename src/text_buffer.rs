@@ -1,27 +1,33 @@
 use crate::menu;
 use druid::text::{AttributesAdder, RichText, RichTextBuilder};
 use druid::widget::prelude::*;
-use druid::widget::{Controller, LineBreaking, RawLabel, Scroll, Split, TextBox};
-use druid::{
-    Color, Command, DelegateCtx, FontFamily, FontStyle, FontWeight, Handled, Lens, Selector,
-    Target, Widget, WidgetExt,
-};
+use druid::widget::Controller;
+use druid::{Code, Color, Data, FontFamily, FontStyle, FontWeight, Lens, Selector, Widget};
 use menu::GeneralState;
-use pulldown_cmark::{Event as ParseEvent, Options, Parser, Tag};
+use pulldown_cmark::{CowStr, Event as ParseEvent, Options, Parser, Tag};
 
 /// Size of the spacing between lines.
-const SPACER_SIZE: f64 = 8.0;
+const _SPACER_SIZE: f64 = 8.0;
 
+const OPEN_LINK: Selector<String> = Selector::new("druid-example.open-link");
 /// Colors of the quotes in Markdown.
 const BLOCKQUOTE_COLOR: Color = Color::grey8(0x88);
 
 /// Colors of the links in Markdown.
 const LINK_COLOR: Color = Color::rgb8(0, 0, 0xEE);
 
-/// Command for opening links in markdown.
-const OPEN_LINK: Selector<String> = Selector::new("druid-example.open-link");
-
+/// A struct that is used to re render a plain text to rich text.
+#[derive(Clone)]
 pub struct RichTextRebuilder;
+
+/// Text Buffer Data that will be used in tab instancing.
+#[derive(Clone, Data, Lens)]
+pub struct TextBufferData {
+    pub file_name: String,
+    pub file_path: String,
+    pub raw: String,
+    pub rendered: RichText,
+}
 
 impl<W: Widget<GeneralState>> Controller<GeneralState, W> for RichTextRebuilder {
     fn event(
@@ -33,9 +39,11 @@ impl<W: Widget<GeneralState>> Controller<GeneralState, W> for RichTextRebuilder 
         env: &Env,
     ) {
         let pre_data = data.raw.to_owned();
+        // Checks the keyboard event.
         child.event(ctx, event, data, env);
         if !data.raw.same(&pre_data) {
             data.rendered = rebuild_rendered_text(&data.raw);
+            // println!("The rendered text: {:?}", &data.rendered);
         }
     }
 }
@@ -44,37 +52,49 @@ pub fn rebuild_rendered_text(text: &str) -> RichText {
     let mut current_pos = 0;
     let mut builder = RichTextBuilder::new();
     let mut tag_stack = Vec::new();
+    // println!("This is the raw txt: {}", text);
 
     let parser = Parser::new_ext(text, Options::ENABLE_STRIKETHROUGH);
-
     for event in parser {
         match event {
             ParseEvent::Start(tag) => {
+                // println!(
+                //     "Pushing to tag stack\nCurrent Pos: {}\nThe Tag: {:?}",
+                //     current_pos, tag
+                // );
                 tag_stack.push((current_pos, tag));
+                // println!("Start event");
             }
             ParseEvent::Text(txt) => {
                 builder.push(&txt);
                 current_pos += txt.len();
             }
+            //* Iterator kullanıldığı için, her daim 3 event minimum dönüyor bu eventler sırası ile start, text, end eventleri. */
             ParseEvent::End(end_tag) => {
+                // Starting position and the starting tag from tag_stack.
+                // println!("End event.");
                 let (start_off, tag) = tag_stack
                     .pop()
                     .expect("Parser does not return unbalanced tags");
+                println!("The start_off: {}", start_off);
                 assert_eq!(end_tag, tag, "mismatched tags?");
                 add_attribute_for_tag(
                     &tag,
                     builder.add_attributes_for_range(start_off..current_pos),
                 );
+
                 if add_newline_after_tag(&tag) {
-                    builder.push("\n\n");
-                    current_pos += 2;
+                    builder.push("\n");
+                    current_pos += 1;
                 }
             }
             ParseEvent::Code(txt) => {
                 builder.push(&txt).font_family(FontFamily::MONOSPACE);
                 current_pos += txt.len();
+                println!("Code Event.");
             }
             ParseEvent::Html(txt) => {
+                println!("HTML event.");
                 builder
                     .push(&txt)
                     .font_family(FontFamily::MONOSPACE)
@@ -82,7 +102,8 @@ pub fn rebuild_rendered_text(text: &str) -> RichText {
                 current_pos += txt.len();
             }
             ParseEvent::HardBreak => {
-                builder.push("\n\n");
+                println!("HardBreak Event");
+                builder.push("\n");
                 current_pos += 2;
             }
             _ => (),
@@ -122,12 +143,15 @@ fn add_attribute_for_tag(tag: &Tag, mut attrs: AttributesAdder) {
                 .text_color(LINK_COLOR)
                 .link(OPEN_LINK.with(target.to_string()));
         }
+        Tag::Paragraph => {
+            attrs.text_color(Color::BLUE);
+        }
         _ => (),
     }
 }
 
 /// This function determines if there is a need to add a new line after a tag.
-/// it does this by comparing the tag with its enumarators. if the tag has an emphasis, is strongi has strikethroug, or is a link, it will return true.
+/// it does this by comparing the tag with its enumarators. if the tag has an emphasis, is strong has strikethrough, or is a link, it will return false.
 fn add_newline_after_tag(tag: &Tag) -> bool {
     !matches! {
         tag,
