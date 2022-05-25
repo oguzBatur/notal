@@ -4,6 +4,9 @@ use druid::{
     widget::{Button, Flex},
     Data, FileDialogOptions, FileSpec, Lens, Selector, Widget,
 };
+use druid::widget::{Axis, TabsEdge};
+use crate::{DynamicTextBufferTab, TabConfig};
+
 pub const NEW_FILE_SELECTOR: Selector<EmptyFile> = Selector::new("notal.open.new_file");
 type EmptyFile = bool;
 pub fn build_menu() -> impl Widget<GeneralState> {
@@ -63,4 +66,6 @@ pub struct GeneralState {
     pub rendered: RichText,
     pub is_new_file: bool,
     pub is_live_preview_open: bool,
+    pub advanced: DynamicTextBufferTab,
+    pub tab_config: TabConfig
 }

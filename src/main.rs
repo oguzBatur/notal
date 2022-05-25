@@ -1,15 +1,17 @@
 use std::fs;
+use std::time::Duration;
 pub mod menu;
+use log::error;
 use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
-use druid::{
-    commands,
-    widget::{prelude::*, BackgroundBrush, Either, Split},
-    widget::{LineBreaking, RawLabel, Scroll, TextBox},
-    AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem,
-    Selector, Widget, WidgetExt, WindowDesc, WindowId,
-};
+use crate::text_buffer::TextBufferData;
+use druid::widget::{Axis, Container, Flex, Label, LensWrap, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
+use druid::{commands, im::Vector, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, LensExt};
+use druid::piet::Text;
+use druid::text::RichText;
+use druid::widget::LabelText::Dynamic;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
+
 /// Empy Buffer Text.
 const EMPTY_BUFFER_TEXT: &str = "";
 const WINDOW_TITLE: LocalizedString<GeneralState> = LocalizedString::new("Notal");
@@ -32,15 +34,21 @@ fn main() {
         file_name: "".to_string(),
         file_path: "".to_string(),
         is_on_menu: true,
+        tab_config: TabConfig {
+            transition: TabsTransition::Slide(Duration::from_millis(250).as_nanos() as u64),
+            axis: Axis::Horizontal,
+            edge: TabsEdge::Leading,
+        },
         raw: EMPTY_BUFFER_TEXT.to_owned(),
         rendered: rebuild_rendered_text(EMPTY_BUFFER_TEXT),
+        advanced: DynamicTextBufferTab::new(1),
     };
 
     AppLauncher::with_window(window)
         .log_to_console()
         .delegate(Delegate)
         .launch(initial_state)
-        .expect("Error occured.");
+        .expect("Uygulamayı acma eylemi basarisiz");
 }
 struct Delegate;
 
@@ -54,22 +62,18 @@ impl AppDelegate<GeneralState> for Delegate {
         _env: &Env,
     ) -> druid::Handled {
         if let Some(file_info) = cmd.get(commands::OPEN_FILE) {
-            // write the file path to state.
-            data.file_path = file_info.path().to_str().unwrap().to_string();
-            // Write the file name to state.
-            data.file_name = file_info
-                .path()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_owned();
             let file_contents = fs::read_to_string(data.file_path.clone()).unwrap();
-            data.raw = file_contents.clone();
-            data.rendered = rebuild_rendered_text(&file_contents.as_str());
-            data.is_on_menu = false;
+            let file_path = file_info.path().to_str().unwrap().to_string();
+            let file_name = file_info.path().file_name().unwrap().to_str().unwrap().to_owned();
+            let raw = file_contents.clone();
+            let rendered = rebuild_rendered_text(&raw.as_str());
+            data.advanced.add_text_buffer_tab(file_path, file_name, raw, rendered );
 
+            if data.is_on_menu {
+                data.is_on_menu = false;
+            }
             Handled::Yes
+
         } else if let Some(state) = cmd.get(NEW_FILE_SELECTOR) {
             if state.to_owned() {
                 data.is_on_menu = false;
@@ -79,11 +83,6 @@ impl AppDelegate<GeneralState> for Delegate {
             } else {
                 Handled::No
             }
-        } else if let Some(_) = cmd.get(CLOSE_BUFFER) {
-            data.is_on_menu = true;
-            data.raw = "".to_string();
-            data.rendered = rebuild_rendered_text("");
-            Handled::Yes
         } else if let Some(_) = cmd.get(CLOSE_PREVIEW) {
             data.is_live_preview_open = false;
             Handled::Yes
@@ -98,37 +97,12 @@ impl AppDelegate<GeneralState> for Delegate {
 
 /// Ui function that implements the root widget.
 fn root_builder() -> impl Widget<GeneralState> {
-    let textbox = TextBox::multiline()
-        .lens(GeneralState::raw)
-        .controller(RichTextRebuilder)
-        .padding(5.0)
-        .background(BackgroundBrush::Color(Color::WHITE));
-
-    let textbox_standalone = TextBox::multiline()
-        .lens(GeneralState::raw)
-        .controller(RichTextRebuilder)
-        .padding(5.0)
-        .background(BackgroundBrush::Color(Color::WHITE));
-
-    let label = Scroll::new(
-        RawLabel::new()
-            .with_text_color(Color::BLACK)
-            .with_line_break_mode(LineBreaking::WordWrap)
-            .lens(GeneralState::rendered)
-            .padding(5.0),
-    )
-    .background(BackgroundBrush::Color(Color::SILVER));
     let menu = build_menu().background(BackgroundBrush::Color(Color::WHITE));
-    let either_text_buffer: Either<GeneralState> = Either::new(
-        |data, _env| data.is_live_preview_open,
-        Split::columns(textbox, label)
-            .draggable(true)
-            .split_point(0.4),
-        textbox_standalone,
+    let vs = ViewSwitcher::new(
+        |app_s: &GeneralState, _| app_s.tab_config.clone(),
+        |tc: &TabConfig, _,_| Box::new(build_tab_widget(tc)),
     );
-
-    let either: Either<GeneralState> =
-        Either::new(|data, _env| data.is_on_menu, menu, either_text_buffer);
+    let either: Either<GeneralState> = Either::new(|data, _env| data.is_on_menu, menu, vs);
     return either;
 }
 
@@ -173,6 +147,146 @@ fn make_menu<T: Data>(
 // *update*: After this call returns, the framework checks to see if the data was mutated. If so , it call the root widget's update method.
 
 //TODO - Add text buffer vectors to make it possible to create more than one text buffer.
+//TODO -
 
+/// Dinamik Text Buffer sekmeleri oluşturup kontrol etmek için kullanılan struct.
 #[derive(Clone, Data, Lens)]
-struct DynamicTabData {}
+pub struct DynamicTextBufferTab {
+    hightest_tab: usize,
+    removed_tabs: usize,
+    text_buffers: Vector<TextBufferData>,
+    tab_labels: Vector<usize>
+}
+
+impl DynamicTextBufferTab {
+    /// Create a new DynamicTabData struct.
+    fn new(hightest_tab: usize) -> Self {
+        Self {
+            hightest_tab,
+            removed_tabs: 0,
+            tab_labels: (1..=hightest_tab).collect(),
+            text_buffers: Vector::from(vec![TextBufferData{
+                rendered: rebuild_rendered_text(""),
+                file_name: "".to_string(),
+                file_path: "".to_string(),
+                is_live_preview_open: true,
+                raw: "".to_string(),
+            }])
+        }
+    }
+
+    /// Yeni bir text buffer tab'i yarat.
+    fn add_text_buffer_tab(&mut self, file_path: String, file_name: String, raw: String, rendered: RichText ) {
+        self.hightest_tab += 1;
+        self.tab_labels.push_back(self.hightest_tab);
+        self.text_buffers.push_back(TextBufferData {
+            raw: raw.clone(),
+            file_path,
+            file_name,
+            is_live_preview_open: true,
+            rendered: rebuild_rendered_text(raw.as_str())
+        });
+    }
+
+    /// Text Buffer Sekmesini Kapat.
+    fn remove_text_buffer_tab(&mut self, idx: usize) {
+        if idx >= self.tab_labels.len() {
+            // ! Var olmayan sekme id'si ile işlem yapılmaya çalışılındı */
+            error!("Var olmayan sekme kapatilmaya çalişilindi: {}", idx);
+        } else {
+            self.removed_tabs += 1;
+            self.tab_labels.remove(idx);
+            self.text_buffers.remove(idx);
+        }
+    }
+
+    fn tabs_key(&self) -> (usize, usize) {
+        return (self.hightest_tab, self.removed_tabs);
+    }
+}
+#[derive(Data, Clone, Lens)]
+pub struct TabConfig {
+    pub axis: Axis,
+    pub edge: TabsEdge,
+    pub transition: TabsTransition,
+}
+
+/// Policy to control tabs dynamically.
+#[derive(Clone, Data)]
+struct TextBufferTabs;
+
+impl TabsPolicy for TextBufferTabs {
+    type Key = usize;
+    type Build = ();
+    type Input = DynamicTextBufferTab;
+    type LabelWidget = Label<DynamicTextBufferTab>;
+    type BodyWidget = Container<DynamicTextBufferTab>;
+
+    fn tabs_changed(&self, old_data: &Self::Input, data: &Self::Input) -> bool {
+        old_data.tabs_key() != data.tabs_key()
+    }
+    fn tabs(&self, data: &Self::Input) -> Vec<Self::Key> {
+        data.tab_labels.iter().copied().collect()
+    }
+    fn tab_info(&self, key: Self::Key, _data: &Self::Input) -> TabInfo<Self::Input> {
+        TabInfo::new(format!("{}", _data.text_buffers.get(key).unwrap().file_name), true)
+    }
+    fn close_tab(&self, key: Self::Key, data: &mut Self::Input) {
+        if let Some(id) = data.tab_labels.index_of(&key) {
+            data.remove_text_buffer_tab(id)
+        }
+    }
+    fn tab_label(
+        &self,
+        _key: Self::Key,
+        info: TabInfo<Self::Input>,
+        _data: &Self::Input,
+    ) -> Self::LabelWidget {
+        Self::default_make_label(info)
+    }
+    fn tab_body(&self, key: Self::Key, _data: &Self::Input) -> Self::BodyWidget {
+        let lensed_widget = build_text_buffer_widget();
+        let text_buffer = *_data.text_buffers.get(key).unwrap().lens();
+        Container::new(build_text_buffer_widget().lens(*text_buffer))
+    }
+}
+
+fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
+    let dynamic_tabs = Tabs::for_policy(TextBufferTabs)
+        .with_axis(tab_config.axis)
+        .with_edge(tab_config.edge)
+        .with_transition(tab_config.transition)
+        .lens(GeneralState::advanced);
+    Container::new(dynamic_tabs)
+}
+
+fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
+    let textbox = TextBox::multiline()
+        .lens(TextBufferData::raw)
+        .controller(RichTextRebuilder)
+        .padding(5.0)
+        .background(BackgroundBrush::Color(Color::WHITE));
+    let textbox_standalone = TextBox::multiline()
+        .lens(TextBufferData::raw)
+        .controller(RichTextRebuilder)
+        .padding(5.0)
+        .background(BackgroundBrush::Color(Color::WHITE));
+
+    let label = Scroll::new(
+        RawLabel::new()
+            .with_text_color(Color::BLACK)
+            .with_line_break_mode(LineBreaking::WordWrap)
+            .lens(TextBufferData::rendered)
+            .padding(5.0),
+    )
+        .background(BackgroundBrush::Color(Color::SILVER));
+    let either_text_buffer: Either<TextBufferData> = Either::new(
+        |data, _env| data.is_live_preview_open,
+        Split::columns(textbox, label)
+            .draggable(true)
+            .split_point(0.4),
+        textbox_standalone,
+    );
+
+    return either_text_buffer;
+}

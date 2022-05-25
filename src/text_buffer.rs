@@ -1,18 +1,20 @@
-use crate::menu;
+use crate::{GeneralState, menu, Vector};
 use druid::text::{AttributesAdder, RichText, RichTextBuilder};
 use druid::widget::prelude::*;
 use druid::widget::Controller;
-use druid::{Code, Color, Data, FontFamily, FontStyle, FontWeight, Lens, Selector, Widget};
-use menu::GeneralState;
-use pulldown_cmark::{CowStr, Event as ParseEvent, Options, Parser, Tag};
+use druid::{ Color, Data, FontFamily, FontStyle, FontWeight, Lens, Selector, Widget};
+use pulldown_cmark::{Event as ParseEvent, Options, Parser, Tag};
+
+//* Deneme
+//TODO - Solve the paragrapgh break not working bug.
 
 /// Size of the spacing between lines.
 const _SPACER_SIZE: f64 = 8.0;
 
+
 const OPEN_LINK: Selector<String> = Selector::new("druid-example.open-link");
 /// Colors of the quotes in Markdown.
 const BLOCKQUOTE_COLOR: Color = Color::grey8(0x88);
-
 /// Colors of the links in Markdown.
 const LINK_COLOR: Color = Color::rgb8(0, 0, 0xEE);
 
@@ -27,15 +29,16 @@ pub struct TextBufferData {
     pub file_path: String,
     pub raw: String,
     pub rendered: RichText,
+    pub is_live_preview_open: bool,
 }
 
-impl<W: Widget<GeneralState>> Controller<GeneralState, W> for RichTextRebuilder {
+impl<W: Widget<TextBufferData>> Controller<TextBufferData, W> for RichTextRebuilder {
     fn event(
         &mut self,
         child: &mut W,
         ctx: &mut EventCtx,
         event: &Event,
-        data: &mut GeneralState,
+        data: &mut TextBufferData,
         env: &Env,
     ) {
         let pre_data = data.raw.to_owned();
@@ -143,7 +146,7 @@ fn add_attribute_for_tag(tag: &Tag, mut attrs: AttributesAdder) {
                 .text_color(LINK_COLOR)
                 .link(OPEN_LINK.with(target.to_string()));
         }
-        Tag::Paragraph => {
+        Tag::Paragraph=> {
             attrs.text_color(Color::BLUE);
         }
         _ => (),
