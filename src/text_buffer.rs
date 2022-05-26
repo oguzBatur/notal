@@ -1,4 +1,4 @@
-use crate::{GeneralState, menu, Vector};
+use crate::{DynamicTextBufferTab, GeneralState, menu, Vector};
 use druid::text::{AttributesAdder, RichText, RichTextBuilder};
 use druid::widget::prelude::*;
 use druid::widget::Controller;
@@ -30,7 +30,10 @@ pub struct TextBufferData {
     pub raw: String,
     pub rendered: RichText,
     pub is_live_preview_open: bool,
+    pub key: usize
 }
+
+
 
 impl<W: Widget<TextBufferData>> Controller<TextBufferData, W> for RichTextRebuilder {
     fn event(

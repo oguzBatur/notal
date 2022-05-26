@@ -6,10 +6,8 @@ use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
 use crate::text_buffer::TextBufferData;
 use druid::widget::{Axis, Container, Flex, Label, LensWrap, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
-use druid::{commands, im::Vector, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, LensExt};
-use druid::piet::Text;
+use druid::{commands, im::Vector, LensExt, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens };
 use druid::text::RichText;
-use druid::widget::LabelText::Dynamic;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
 
 /// Empy Buffer Text.
@@ -155,27 +153,32 @@ pub struct DynamicTextBufferTab {
     hightest_tab: usize,
     removed_tabs: usize,
     text_buffers: Vector<TextBufferData>,
-    tab_labels: Vector<usize>
+    tab_labels: Vector<usize>,
+    current_buffer: TextBufferData,
 }
 
 impl DynamicTextBufferTab {
     /// Create a new DynamicTabData struct.
     fn new(hightest_tab: usize) -> Self {
+        let empty_buffer = TextBufferData{
+            rendered: rebuild_rendered_text(""),
+            file_name: "".to_string(),
+            file_path: "".to_string(),
+            is_live_preview_open: true,
+            raw: "".to_string(),
+            key: 0
+
+        };
         Self {
             hightest_tab,
             removed_tabs: 0,
             tab_labels: (1..=hightest_tab).collect(),
-            text_buffers: Vector::from(vec![TextBufferData{
-                rendered: rebuild_rendered_text(""),
-                file_name: "".to_string(),
-                file_path: "".to_string(),
-                is_live_preview_open: true,
-                raw: "".to_string(),
-            }])
+            text_buffers: Vector::from(vec![empty_buffer.clone()]),
+           current_buffer: empty_buffer
         }
     }
 
-    /// Yeni bir text buffer tab'i yarat.
+    /// Yeni bir text buffer sekmesi yarat.
     fn add_text_buffer_tab(&mut self, file_path: String, file_name: String, raw: String, rendered: RichText ) {
         self.hightest_tab += 1;
         self.tab_labels.push_back(self.hightest_tab);
@@ -184,7 +187,8 @@ impl DynamicTextBufferTab {
             file_path,
             file_name,
             is_live_preview_open: true,
-            rendered: rebuild_rendered_text(raw.as_str())
+            rendered: rebuild_rendered_text(raw.as_str()),
+            key: self.hightest_tab - 1
         });
     }
 
@@ -245,9 +249,11 @@ impl TabsPolicy for TextBufferTabs {
         Self::default_make_label(info)
     }
     fn tab_body(&self, key: Self::Key, _data: &Self::Input) -> Self::BodyWidget {
-        let lensed_widget = build_text_buffer_widget();
-        let text_buffer = *_data.text_buffers.get(key).unwrap().lens();
-        Container::new(build_text_buffer_widget().lens(*text_buffer))
+        let buffer_lens = lens!(DynamicTextBufferTab, text_buffers);
+        buffer_lens.map(|txt| {
+            txt.get_mut(key).unwrap()
+        }, |txt, x|)
+
     }
 }
 
@@ -260,12 +266,14 @@ fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
     Container::new(dynamic_tabs)
 }
 
+/// ### Builds the Text Buffer Widget that contains all the relevant components.
 fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
     let textbox = TextBox::multiline()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
         .padding(5.0)
         .background(BackgroundBrush::Color(Color::WHITE));
+
     let textbox_standalone = TextBox::multiline()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
@@ -288,5 +296,5 @@ fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
         textbox_standalone,
     );
 
-    return either_text_buffer;
+    return Container::new(either_text_buffer);
 }
