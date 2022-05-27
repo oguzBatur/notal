@@ -32,6 +32,18 @@ pub struct TextBufferData {
     pub is_live_preview_open: bool,
     pub key: usize
 }
+impl TextBufferData {
+    fn open_preview(&mut self) {
+        if !self.is_live_preview_open {
+            self.is_live_preview_open = true;
+        }
+    }
+    fn close_preview(&mut self) {
+        if self.is_live_preview_open {
+            self.is_live_preview_open = false;
+        }
+    }
+}
 
 
 
