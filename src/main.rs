@@ -1,12 +1,13 @@
 use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 pub mod menu;
 use log::error;
 use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
 use crate::text_buffer::TextBufferData;
-use druid::widget::{Axis, Button, Container,  Label, LensWrap, MainAxisAlignment, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
-use druid::{commands, im::Vector, LensExt, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens };
+use druid::widget::{Axis, Button, Container, Flex, Label, LensWrap, List, MainAxisAlignment, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
+use druid::{commands, im::Vector, LensExt, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, DelegateCtx, WindowHandle, FileInfo};
 use druid::text::RichText;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
 
@@ -17,7 +18,6 @@ const WINDOW_TITLE: LocalizedString<GeneralState> = LocalizedString::new("Notal"
 const CLOSE_BUFFER: Selector<()> = Selector::new("notal-close-buffer");
 const OPEN_PREVIEW: Selector<usize> = Selector::new("notal-close-preview");
 const CLOSE_PREVIEW: Selector<usize> = Selector::new("notal-open-preview");
-///
 const DEFAULT_WINDOW_SIZE: (f64, f64) = (800.0, 600.0);
 fn main() {
     let window: WindowDesc<GeneralState> = WindowDesc::new(root_builder())
@@ -25,22 +25,18 @@ fn main() {
         .menu(make_menu)
         .window_size(Size::new(DEFAULT_WINDOW_SIZE.0, DEFAULT_WINDOW_SIZE.1));
 
+
     let initial_state = GeneralState {
-        file_content_raw: "".to_string(),
         window_size: DEFAULT_WINDOW_SIZE,
-        is_live_preview_open: true,
         is_new_file: false,
-        file_name: "".to_string(),
-        file_path: "".to_string(),
         is_on_menu: true,
         tab_config: TabConfig {
             transition: TabsTransition::Slide(Duration::from_millis(250).as_nanos() as u64),
             axis: Axis::Horizontal,
             edge: TabsEdge::Leading,
         },
-        raw: EMPTY_BUFFER_TEXT.to_owned(),
-        rendered: rebuild_rendered_text(EMPTY_BUFFER_TEXT),
         advanced: DynamicTextBufferTab::new(0),
+        files: Vector::new()
     };
 
     AppLauncher::with_window(window)
@@ -49,6 +45,7 @@ fn main() {
         .launch(initial_state)
         .expect("Uygulamayı acma eylemi basarisiz");
 }
+/// ### Manages the commands that go through the Notal application.
 struct Delegate;
 
 impl AppDelegate<GeneralState> for Delegate {
@@ -77,9 +74,8 @@ impl AppDelegate<GeneralState> for Delegate {
 
         } else if let Some(state) = cmd.get(NEW_FILE_SELECTOR) {
             if state.to_owned() {
+                data.advanced.add_text_buffer_tab(String::from(""), String::from("Adsız"), String::from(""), rebuild_rendered_text(""));
                 data.is_on_menu = false;
-                data.raw = "".to_string();
-                data.rendered = rebuild_rendered_text("");
                 Handled::Yes
             } else {
                 Handled::No
@@ -92,7 +88,13 @@ impl AppDelegate<GeneralState> for Delegate {
             let buffer = data.advanced.text_buffers.get_mut(id.clone()).expect("No buffer with the provided id.") ;
             buffer.is_live_preview_open = true;
             Handled::Yes
-        } else {
+        } else if let Some(file_info)   = cmd.get(commands::SAVE_FILE_AS){
+
+
+
+            Handled::Yes
+        }
+        else {
             Handled::No
         }
     }
@@ -106,7 +108,18 @@ fn root_builder() -> impl Widget<GeneralState> {
         |tc: &TabConfig, _,_| Box::new(build_tab_widget(tc)),
     );
     let either: Either<GeneralState> = Either::new(|data, _env| data.is_on_menu, menu, vs);
+
     return either;
+}
+
+/// File Tree Widget used for navigation.
+fn build_file_tree_widget(folder: &FileInfo) -> impl Widget<GeneralState> {
+    assert_eq!(folder.path().is_dir(), true);
+
+
+
+
+   todo!()
 }
 
 /// Uygulama için düzenleme menüsü.
@@ -287,6 +300,7 @@ fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
 
 /// ### Builds the Text Buffer Widget that contains all the relevant components.
 fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
+
     let preview_button = Button::new("Önizleme Aç/Kapat").on_click(|ctx, data:&mut TextBufferData, _env| {
         if data.is_live_preview_open {
             ctx.submit_command(CLOSE_PREVIEW.with(data.key));
@@ -294,6 +308,7 @@ fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
             ctx.submit_command(OPEN_PREVIEW.with(data.key));
         }
     });
+
     let preview_button_standalone = Button::new("Önizleme Aç/Kapat").on_click(|ctx, data:&mut TextBufferData, _env| {
         if data.is_live_preview_open {
             ctx.submit_command(CLOSE_PREVIEW.with(data.key));
@@ -301,11 +316,13 @@ fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
             ctx.submit_command(OPEN_PREVIEW.with(data.key));
         }
     });
+
     let textbox = TextBox::multiline().expand()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
         .padding(5.0)
         .background(BackgroundBrush::Color(Color::WHITE));
+
     let textbox_standalone = TextBox::multiline().expand()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
