@@ -1,17 +1,15 @@
-use std::path::PathBuf;
-use druid::{commands, text::RichText, widget::{Button, Flex}, Data, FileDialogOptions, FileSpec, Lens, Selector, Widget, ImageBuf, WidgetExt};
-use druid::widget::{BackgroundBrush, CrossAxisAlignment, FillStrat, FlexParams, Image, SizedBox, TabsEdge};
-use crate::{Color, DynamicTextBufferTab, FileInfo, TabConfig, Vector};
+use druid::{commands, widget::{Flex}, Data, FileDialogOptions, FileSpec, Lens, Selector, Widget, ImageBuf, WidgetExt, FontDescriptor, FontWeight, UnitPoint};
+use druid::widget::{BackgroundBrush,  FillStrat, Image, Label, SizedBox};
+use crate::{Color, COLOR_YELLOW, DynamicTextBufferTab, LABEL_BACKGROUND_COLOR, TabConfig};
 
 pub const NEW_FILE_SELECTOR: Selector<EmptyFile> = Selector::new("notal.open.new_file");
 type EmptyFile = bool;
 /// ### Default Background Color of the menu.
 const MENU_BACKGROUND_COLOR: Color = Color::rgb8(173, 216, 230);
-
 /// ### Main Menu of the Notal App.
 pub fn build_menu() -> impl Widget<GeneralState> {
     let png_data = ImageBuf::from_data(include_bytes!("../notal_logo.png")).unwrap();
-    let img = Image::new(png_data).fill_mode(FillStrat::Fill);
+    let img = Image::new(png_data).fill_mode(FillStrat::Fill).padding(10.0);
     let sized:SizedBox<GeneralState> = SizedBox::new(img);
     let markdown_files = FileSpec::new("Markdown Dosyaları", &["md"]);
     let text_files = FileSpec::new("Text Dosyaları", &["txt"]);
@@ -19,22 +17,35 @@ pub fn build_menu() -> impl Widget<GeneralState> {
         .allowed_types(vec![markdown_files, text_files])
         .title("Dosya Seç...");
 
-    let open_file_button =
-        Button::new("Dosya Aç").on_click(move |ctx, _data: &mut GeneralState, _env| {
-            ctx.submit_command(
-                commands::SHOW_OPEN_PANEL
-                    .with(file_dialog_options.clone().name_label("Denem here.")),
-            );
+    let open_button = Label::new("Dosya Aç...")
+        .with_font(FontDescriptor::with_weight(FontDescriptor::default(), FontWeight::BOLD))
+        .with_text_size(14.0)
+        .center()
+        .background(LABEL_BACKGROUND_COLOR)
+        .rounded(4.0)
+        .fix_size(100.0,30.0)
+        .on_click(move |ctx, _data: &mut GeneralState, _env| {
+            ctx.submit_command(commands::SHOW_OPEN_PANEL.with(file_dialog_options.clone().name_label("Dosya aç")));
         });
 
-    let new_file_button =
-        Button::new("Yeni Dosya").on_click(move |ctx, _data: &mut GeneralState, _env| {
+    let new_file_button = Label::new("Yeni Dosya")
+        .with_font(FontDescriptor::with_weight(FontDescriptor::default(), FontWeight::BOLD))
+        .with_text_size(14.0)
+        .center()
+        .background(COLOR_YELLOW)
+        .rounded(4.0)
+        .fix_size(100.0,30.0)
+        .on_click(move |ctx, _data: &mut GeneralState, _env| {
             ctx.submit_command(NEW_FILE_SELECTOR.with(true));
-        });
+        }).padding(10.0);
+
     Flex::column()
-        .with_child(sized.width(200.0))
-        .with_child(open_file_button)
-        .with_child(new_file_button).background(BackgroundBrush::Color(MENU_BACKGROUND_COLOR))
+        .with_child(sized.width(150.0))
+        .with_child(open_button)
+        .with_child(new_file_button)
+        .align_horizontal(UnitPoint::CENTER)
+        .align_vertical(UnitPoint::CENTER)
+        .background(BackgroundBrush::Color(MENU_BACKGROUND_COLOR))
 }
 pub fn open_file_menu_dialog() -> FileDialogOptions {
     let markdown_files = FileSpec::new("Markdown Dosyaları", &["md"]);
@@ -66,6 +77,5 @@ pub struct GeneralState {
     pub is_new_file: bool,
     pub advanced: DynamicTextBufferTab,
     pub tab_config: TabConfig,
-    pub files: Vector<PathBuf>
 
 }

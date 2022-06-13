@@ -1,17 +1,11 @@
-use crate::{DynamicTextBufferTab, GeneralState, menu, Vector};
 use druid::text::{AttributesAdder, RichText, RichTextBuilder};
 use druid::widget::prelude::*;
 use druid::widget::Controller;
 use druid::{ Color, Data, FontFamily, FontStyle, FontWeight, Lens, Selector, Widget};
 use pulldown_cmark::{Event as ParseEvent, Options, Parser, Tag};
 
-//* Deneme
-//TODO - Solve the paragrapgh break not working bug.
-
 /// Size of the spacing between lines.
 const _SPACER_SIZE: f64 = 8.0;
-
-
 const OPEN_LINK: Selector<String> = Selector::new("druid-example.open-link");
 /// Colors of the quotes in Markdown.
 const BLOCKQUOTE_COLOR: Color = Color::grey8(0x88);
@@ -32,20 +26,6 @@ pub struct TextBufferData {
     pub is_live_preview_open: bool,
     pub key: usize
 }
-impl TextBufferData {
-    fn open_preview(&mut self) {
-        if !self.is_live_preview_open {
-            self.is_live_preview_open = true;
-        }
-    }
-    fn close_preview(&mut self) {
-        if self.is_live_preview_open {
-            self.is_live_preview_open = false;
-        }
-    }
-}
-
-
 
 impl<W: Widget<TextBufferData>> Controller<TextBufferData, W> for RichTextRebuilder {
     fn event(
@@ -57,13 +37,26 @@ impl<W: Widget<TextBufferData>> Controller<TextBufferData, W> for RichTextRebuil
         env: &Env,
     ) {
         let pre_data = data.raw.to_owned();
-        // Checks the keyboard event.
         child.event(ctx, event, data, env);
+
+        match event {
+            // if there is a key press add a asterisk at the start of the file name.
+            Event::KeyDown(_) => {
+                let asterisk: char = '*';
+                let mut edited = data.file_name.clone();
+                edited.push(asterisk);
+                if !data.file_name.same(&edited) && !data.raw.same(&pre_data.to_owned()) {
+                    data.file_name.push(asterisk);
+                }
+            }
+            _ => ()
+        }
         if !data.raw.same(&pre_data) {
             data.rendered = rebuild_rendered_text(&data.raw);
             // println!("The rendered text: {:?}", &data.rendered);
         }
     }
+
 }
 
 pub fn rebuild_rendered_text(text: &str) -> RichText {
@@ -94,7 +87,6 @@ pub fn rebuild_rendered_text(text: &str) -> RichText {
                 let (start_off, tag) = tag_stack
                     .pop()
                     .expect("Parser does not return unbalanced tags");
-                println!("The start_off: {}", start_off);
                 assert_eq!(end_tag, tag, "mismatched tags?");
                 add_attribute_for_tag(
                     &tag,
@@ -109,10 +101,8 @@ pub fn rebuild_rendered_text(text: &str) -> RichText {
             ParseEvent::Code(txt) => {
                 builder.push(&txt).font_family(FontFamily::MONOSPACE);
                 current_pos += txt.len();
-                println!("Code Event.");
             }
             ParseEvent::Html(txt) => {
-                println!("HTML event.");
                 builder
                     .push(&txt)
                     .font_family(FontFamily::MONOSPACE)
@@ -120,7 +110,6 @@ pub fn rebuild_rendered_text(text: &str) -> RichText {
                 current_pos += txt.len();
             }
             ParseEvent::HardBreak => {
-                println!("HardBreak Event");
                 builder.push("\n");
                 current_pos += 2;
             }

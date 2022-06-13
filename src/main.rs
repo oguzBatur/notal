@@ -6,25 +6,32 @@ use log::error;
 use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
 use crate::text_buffer::TextBufferData;
-use druid::widget::{Axis, Button, Container, Flex, Label, LensWrap, List, MainAxisAlignment, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
-use druid::{commands, im::Vector, LensExt, widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, DelegateCtx, WindowHandle, FileInfo};
+use druid::widget::{Axis, Container, Label, LensWrap, List, MainAxisAlignment, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
+use druid::{commands, im::Vector, LensExt,  widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, DelegateCtx, WindowHandle, FileInfo, Key, FontFamily};
 use druid::text::RichText;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
 
-/// Empy Buffer Text.
-const EMPTY_BUFFER_TEXT: &str = "";
+
+/// Margin that is used for markdown formatted panel.
 const MARKDOWN_LABEL_SPACER: f64 = 12.0;
 const WINDOW_TITLE: LocalizedString<GeneralState> = LocalizedString::new("Notal");
 const CLOSE_BUFFER: Selector<()> = Selector::new("notal-close-buffer");
 const OPEN_PREVIEW: Selector<usize> = Selector::new("notal-close-preview");
 const CLOSE_PREVIEW: Selector<usize> = Selector::new("notal-open-preview");
 const DEFAULT_WINDOW_SIZE: (f64, f64) = (800.0, 600.0);
+/// ### Default button color key.
+const COLOR_YELLOW: Color = Color::rgb8(247,243, 150);
+const COLOR_BLUE: Color = Color::rgb8(126,171,199);
+const COLOR_LIGHTBLUE: Color = Color::rgb8(126,161,169);
+const MENU_TEXT_SIZE: Key<f64> = Key::new("org.notal.label-font-size");
+const LABEL_BACKGROUND_COLOR: Key<Color> = Key::new("org.notal.label-background-color");
+
+/// Yazılım içerisindeki dökümanın çoğu ingilizcedir. Kod tamamen uygulama geliştiricisine(Batur) aittir.
 fn main() {
     let window: WindowDesc<GeneralState> = WindowDesc::new(root_builder())
         .title(WINDOW_TITLE)
         .menu(make_menu)
         .window_size(Size::new(DEFAULT_WINDOW_SIZE.0, DEFAULT_WINDOW_SIZE.1));
-
 
     let initial_state = GeneralState {
         window_size: DEFAULT_WINDOW_SIZE,
@@ -36,27 +43,31 @@ fn main() {
             edge: TabsEdge::Leading,
         },
         advanced: DynamicTextBufferTab::new(0),
-        files: Vector::new()
     };
 
     AppLauncher::with_window(window)
+        .configure_env(|env, data | {
+            env.set(LABEL_BACKGROUND_COLOR, COLOR_BLUE);
+            env.set(MENU_TEXT_SIZE, 12.0);
+        })
         .log_to_console()
         .delegate(Delegate)
         .launch(initial_state)
         .expect("Uygulamayı acma eylemi basarisiz");
 }
+
 /// ### Manages the commands that go through the Notal application.
 struct Delegate;
 
 impl AppDelegate<GeneralState> for Delegate {
     fn command(
         &mut self,
-        _ctx: &mut druid::DelegateCtx,
+        _ctx: &mut DelegateCtx,
         _target: druid::Target,
         cmd: &druid::Command,
         data: &mut GeneralState,
         _env: &Env,
-    ) -> druid::Handled {
+    ) -> Handled {
         if let Some(file_info) = cmd.get(commands::OPEN_FILE) {
             let file_contents = match fs::read_to_string(file_info.clone().path) {
                 Ok(file) => file,
@@ -90,8 +101,6 @@ impl AppDelegate<GeneralState> for Delegate {
             Handled::Yes
         } else if let Some(file_info)   = cmd.get(commands::SAVE_FILE_AS){
 
-
-
             Handled::Yes
         }
         else {
@@ -112,15 +121,6 @@ fn root_builder() -> impl Widget<GeneralState> {
     return either;
 }
 
-/// File Tree Widget used for navigation.
-fn build_file_tree_widget(folder: &FileInfo) -> impl Widget<GeneralState> {
-    assert_eq!(folder.path().is_dir(), true);
-
-
-
-
-   todo!()
-}
 
 /// Uygulama için düzenleme menüsü.
 fn make_menu<T: Data>(
@@ -156,14 +156,10 @@ fn make_menu<T: Data>(
     )
 }
 
-// Druid works like this,
-// *event*: Event arrives from the operating system, such as a key press, a mouse movement, or a timer firing.
-// *update*: After this call returns, the framework checks to see if the data was mutated. If so , it call the root widget's update method.
 
-//TODO - Add text buffer vectors to make it possible to create more than one text buffer. Done!
-//FIXME Application crashes if one tab is closed and user messages to open another. tabs_info cant find the key in that case.
 
 /// ### Dinamik Text Buffer sekmeleri oluşturup kontrol etmek için kullanılan struct.
+/// #### Implementasyonu mevcut.
 #[derive(Clone, Data, Lens)]
 pub struct DynamicTextBufferTab {
     hightest_tab: usize,
@@ -249,13 +245,15 @@ impl TabsPolicy for TextBufferTabs {
     }
 
     fn tab_info(&self, key: Self::Key, _data: &Self::Input) -> TabInfo<Self::Input> {
-        println!("Tab info requested on: {}", key);
+        //println!("Tab info requested on: {}", key);
         let get_buffer =   _data.text_buffers.get(_data.hightest_tab) .unwrap();
-        TabInfo::new(format!("{}", get_buffer.file_name), true)
+
+        TabInfo::new(format!("*{}", get_buffer.file_name), true)
+
     }
 
     fn close_tab(&self, key: Self::Key, data: &mut Self::Input) {
-        println!("Close requested on : {}", &key);
+        //println!("Close requested on : {}", &key);
         if let Some(id) = data.tab_labels.index_of(&key) {
             data.remove_text_buffer_tab(id)
         }
@@ -300,22 +298,6 @@ fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
 
 /// ### Builds the Text Buffer Widget that contains all the relevant components.
 fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
-
-    let preview_button = Button::new("Önizleme Aç/Kapat").on_click(|ctx, data:&mut TextBufferData, _env| {
-        if data.is_live_preview_open {
-            ctx.submit_command(CLOSE_PREVIEW.with(data.key));
-        } else {
-            ctx.submit_command(OPEN_PREVIEW.with(data.key));
-        }
-    });
-
-    let preview_button_standalone = Button::new("Önizleme Aç/Kapat").on_click(|ctx, data:&mut TextBufferData, _env| {
-        if data.is_live_preview_open {
-            ctx.submit_command(CLOSE_PREVIEW.with(data.key));
-        } else {
-            ctx.submit_command(OPEN_PREVIEW.with(data.key));
-        }
-    });
 
     let textbox = TextBox::multiline().expand()
         .lens(TextBufferData::raw)
