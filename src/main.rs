@@ -1,16 +1,24 @@
 use std::fs;
-use std::path::PathBuf;
 use std::time::Duration;
 pub mod menu;
+use druid::FontDescriptor;
 use log::error;
 use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
 use crate::text_buffer::TextBufferData;
-use druid::widget::{Axis, Container, Label, LensWrap, List, MainAxisAlignment, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
-use druid::{commands, im::Vector, LensExt,  widget::{prelude::*, BackgroundBrush, Either, Split}, widget::{LineBreaking, RawLabel, Scroll, TextBox}, AppDelegate, AppLauncher, Color, Data, Env, Handled, Lens, LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId, lens, DelegateCtx, WindowHandle, FileInfo, Key, FontFamily};
 use druid::text::RichText;
+use druid::widget::{Axis, Container, Controller, Label, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
+use druid::{
+    commands,
+    im::Vector,
+    lens,
+    widget::{prelude::*, BackgroundBrush, Either, Split},
+    widget::{LineBreaking, RawLabel, Scroll, TextBox},
+    AppDelegate, AppLauncher, Color, Data, DelegateCtx, Env, Handled, Key, Lens, LensExt,
+    LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId,
+};
+use druid::piet::Text;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
-
 
 /// Margin that is used for markdown formatted panel.
 const MARKDOWN_LABEL_SPACER: f64 = 12.0;
@@ -20,13 +28,13 @@ const OPEN_PREVIEW: Selector<usize> = Selector::new("notal-close-preview");
 const CLOSE_PREVIEW: Selector<usize> = Selector::new("notal-open-preview");
 const DEFAULT_WINDOW_SIZE: (f64, f64) = (800.0, 600.0);
 /// ### Default button color key.
-const COLOR_YELLOW: Color = Color::rgb8(247,243, 150);
-const COLOR_BLUE: Color = Color::rgb8(126,171,199);
-const COLOR_LIGHTBLUE: Color = Color::rgb8(126,161,169);
+const COLOR_YELLOW: Color = Color::rgb8(247, 243, 150);
+const COLOR_BLUE: Color = Color::rgb8(126, 171, 199);
 const MENU_TEXT_SIZE: Key<f64> = Key::new("org.notal.label-font-size");
 const LABEL_BACKGROUND_COLOR: Key<Color> = Key::new("org.notal.label-background-color");
+const FONT: &[u8] = include_bytes!("../fonts/Inter.ttf");
+const FONT_KEY: Key<FontDescriptor> = Key::new("fonts.InterRegular");
 
-/// Yazılım içerisindeki dökümanın çoğu ingilizcedir. Kod tamamen uygulama geliştiricisine(Batur) aittir.
 fn main() {
     let window: WindowDesc<GeneralState> = WindowDesc::new(root_builder())
         .title(WINDOW_TITLE)
@@ -46,19 +54,18 @@ fn main() {
     };
 
     AppLauncher::with_window(window)
-        .configure_env(|env, data | {
+        .configure_env(|env, _data| {
             env.set(LABEL_BACKGROUND_COLOR, COLOR_BLUE);
             env.set(MENU_TEXT_SIZE, 12.0);
         })
         .log_to_console()
         .delegate(Delegate)
         .launch(initial_state)
-        .expect("Uygulamayı acma eylemi basarisiz");
+        .expect("Error occured when opening the application");
 }
 
 /// ### Manages the commands that go through the Notal application.
 struct Delegate;
-
 impl AppDelegate<GeneralState> for Delegate {
     fn command(
         &mut self,
@@ -71,58 +78,82 @@ impl AppDelegate<GeneralState> for Delegate {
         if let Some(file_info) = cmd.get(commands::OPEN_FILE) {
             let file_contents = match fs::read_to_string(file_info.clone().path) {
                 Ok(file) => file,
-                Err(err) => {println!("{:?}", err); err.to_string()}
+                Err(err) => {
+                    println!("{:?}", err);
+                    err.to_string()
+                }
             };
             let file_path = file_info.path().to_str().unwrap().to_string();
-            let file_name = file_info.path().file_name().unwrap().to_str().unwrap().to_owned();
+            let file_name = file_info
+                .path()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
             let raw = file_contents.clone();
             let rendered = rebuild_rendered_text(&raw.as_str());
-            data.advanced.add_text_buffer_tab(file_path, file_name, raw, rendered );
+            data.advanced
+                .add_text_buffer_tab(file_path, file_name, raw, rendered);
             if data.is_on_menu {
                 data.is_on_menu = false;
             }
             Handled::Yes
-
         } else if let Some(state) = cmd.get(NEW_FILE_SELECTOR) {
             if state.to_owned() {
-                data.advanced.add_text_buffer_tab(String::from(""), String::from("Adsız"), String::from(""), rebuild_rendered_text(""));
+                data.advanced.add_text_buffer_tab(
+                    String::from(""),
+                    String::from("Adsız"),
+                    String::from(""),
+                    rebuild_rendered_text(""),
+                );
                 data.is_on_menu = false;
                 Handled::Yes
             } else {
                 Handled::No
             }
         } else if let Some(id) = cmd.get(CLOSE_PREVIEW) {
-            let buffer = data.advanced.text_buffers.get_mut(id.clone()).expect("No buffer with the provided id.") ;
+            let buffer = data
+                .advanced
+                .text_buffers
+                .get_mut(id.clone())
+                .expect("No buffer with the provided id.");
             buffer.is_live_preview_open = false;
             Handled::Yes
         } else if let Some(id) = cmd.get(OPEN_PREVIEW) {
-            let buffer = data.advanced.text_buffers.get_mut(id.clone()).expect("No buffer with the provided id.") ;
+            let buffer = data
+                .advanced
+                .text_buffers
+                .get_mut(id.clone())
+                .expect("No buffer with the provided id.");
             buffer.is_live_preview_open = true;
             Handled::Yes
-        } else if let Some(file_info)   = cmd.get(commands::SAVE_FILE_AS){
-
+        } else if let Some(_file_info) = cmd.get(commands::SAVE_FILE_AS) {
+            // Not yet implemented.
             Handled::Yes
-        }
-        else {
+        } else {
             Handled::No
         }
     }
 }
 
-/// Ui function that implements the root widget.
+
+//TODO: Construct a Controller for Labels that handle the font and other properties of a label.
+struct LabelController;
+
+/// a Function that implements the root widget.
 fn root_builder() -> impl Widget<GeneralState> {
     let menu = build_menu().background(BackgroundBrush::Color(Color::WHITE));
     let vs = ViewSwitcher::new(
         |app_s: &GeneralState, _| app_s.tab_config.clone(),
-        |tc: &TabConfig, _,_| Box::new(build_tab_widget(tc)),
+        |tc: &TabConfig, _, _| Box::new(build_tab_widget(tc)),
     );
     let either: Either<GeneralState> = Either::new(|data, _env| data.is_on_menu, menu, vs);
 
     return either;
 }
 
-
-/// Uygulama için düzenleme menüsü.
+/// Configure Toolbar menu.
 fn make_menu<T: Data>(
     _window_id: Option<WindowId>,
     _app_state: &GeneralState,
@@ -142,7 +173,7 @@ fn make_menu<T: Data>(
                     MenuItem::new("Dosya Aç...")
                         .command(commands::SHOW_OPEN_PANEL.with(open_file_menu_dialog())),
                 )
-                .entry(MenuItem::new("Kapat").command(CLOSE_BUFFER.with(())))
+                .entry(MenuItem::new("Kapat").command(CLOSE_BUFFER.with(()))),
         );
     }
     base.entry(
@@ -155,8 +186,6 @@ fn make_menu<T: Data>(
             .entry(druid::platform_menus::common::paste()),
     )
 }
-
-
 
 /// ### Dinamik Text Buffer sekmeleri oluşturup kontrol etmek için kullanılan struct.
 /// #### Implementasyonu mevcut.
@@ -171,14 +200,13 @@ pub struct DynamicTextBufferTab {
 impl DynamicTextBufferTab {
     /// Create a new DynamicTabData struct.
     fn new(hightest_tab: usize) -> Self {
-        let empty_buffer = TextBufferData{
+        let empty_buffer = TextBufferData {
             rendered: rebuild_rendered_text(""),
             file_name: "".to_string(),
             file_path: "".to_string(),
             is_live_preview_open: true,
             raw: "".to_string(),
-            key: 0
-
+            key: 0,
         };
         Self {
             hightest_tab,
@@ -189,7 +217,13 @@ impl DynamicTextBufferTab {
     }
 
     /// Yeni bir text buffer sekmesi yarat.
-    fn add_text_buffer_tab(&mut self, file_path: String, file_name: String, raw: String, rendered: RichText ) {
+    fn add_text_buffer_tab(
+        &mut self,
+        file_path: String,
+        file_name: String,
+        raw: String,
+        rendered: RichText,
+    ) {
         self.hightest_tab += 1;
         self.tab_labels.push_back(self.hightest_tab);
         self.text_buffers.push_back(TextBufferData {
@@ -198,7 +232,7 @@ impl DynamicTextBufferTab {
             file_name,
             is_live_preview_open: true,
             rendered,
-            key: self.hightest_tab
+            key: self.hightest_tab,
         });
     }
 
@@ -244,12 +278,11 @@ impl TabsPolicy for TextBufferTabs {
         data.tab_labels.iter().copied().collect()
     }
 
-    fn tab_info(&self, key: Self::Key, _data: &Self::Input) -> TabInfo<Self::Input> {
+    fn tab_info(&self, _key: Self::Key, _data: &Self::Input) -> TabInfo<Self::Input> {
         //println!("Tab info requested on: {}", key);
-        let get_buffer =   _data.text_buffers.get(_data.hightest_tab) .unwrap();
+        let get_buffer = _data.text_buffers.get(_data.hightest_tab).unwrap();
 
         TabInfo::new(format!("*{}", get_buffer.file_name), true)
-
     }
 
     fn close_tab(&self, key: Self::Key, data: &mut Self::Input) {
@@ -269,23 +302,21 @@ impl TabsPolicy for TextBufferTabs {
     }
 
     fn tab_body(&self, key: Self::Key, _data: &Self::Input) -> Self::BodyWidget {
-        let container =
-        Container::new(build_text_buffer_widget()).lens(lens::Identity.map(move |d: &DynamicTextBufferTab| {
-           d.text_buffers.get(key).unwrap().clone()
-        }, move |d, x| {
-            let current = d.text_buffers.get_mut(key).unwrap();
-           current.file_name = x.file_name;
-            current.key = x.key;
-            current.rendered = x.rendered;
-            current.is_live_preview_open = x.is_live_preview_open;
-            current.raw = x.raw;
-            current.file_path = x.file_path;
-
-        }));
+        let container = Container::new(build_text_buffer_widget()).lens(lens::Identity.map(
+            move |d: &DynamicTextBufferTab| d.text_buffers.get(key).unwrap().clone(),
+            move |d, x| {
+                let current = d.text_buffers.get_mut(key).unwrap();
+                current.file_name = x.file_name;
+                current.key = x.key;
+                current.rendered = x.rendered;
+                current.is_live_preview_open = x.is_live_preview_open;
+                current.raw = x.raw;
+                current.file_path = x.file_path;
+            },
+        ));
         Container::new(container)
     }
 }
-
 
 fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
     let dynamic_tabs = Tabs::for_policy(TextBufferTabs)
@@ -298,14 +329,15 @@ fn build_tab_widget(tab_config: &TabConfig) -> impl Widget<GeneralState> {
 
 /// ### Builds the Text Buffer Widget that contains all the relevant components.
 fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
-
-    let textbox = TextBox::multiline().expand()
+    let textbox = TextBox::multiline()
+        .expand()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
         .padding(5.0)
         .background(BackgroundBrush::Color(Color::WHITE));
 
-    let textbox_standalone = TextBox::multiline().expand()
+    let textbox_standalone = TextBox::multiline()
+        .expand()
         .lens(TextBufferData::raw)
         .controller(RichTextRebuilder)
         .padding(5.0)
@@ -317,8 +349,11 @@ fn build_text_buffer_widget() -> impl Widget<TextBufferData> {
             .with_line_break_mode(LineBreaking::WordWrap)
             .lens(TextBufferData::rendered)
             .expand_width()
-            .padding((MARKDOWN_LABEL_SPACER * 4.0,  MARKDOWN_LABEL_SPACER))
-    ).vertical().background(BackgroundBrush::Color(Color::SILVER)).expand();
+            .padding((MARKDOWN_LABEL_SPACER * 4.0, MARKDOWN_LABEL_SPACER)),
+    )
+    .vertical()
+    .background(BackgroundBrush::Color(Color::SILVER))
+    .expand();
 
     let either_text_buffer: Either<TextBufferData> = Either::new(
         |data, _env| data.is_live_preview_open,
