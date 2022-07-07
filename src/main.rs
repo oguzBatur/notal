@@ -7,7 +7,10 @@ use menu::{build_menu, open_file_menu_dialog, GeneralState, NEW_FILE_SELECTOR};
 mod text_buffer;
 use crate::text_buffer::TextBufferData;
 use druid::text::RichText;
-use druid::widget::{Axis, Container, Controller, Label, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition, ViewSwitcher};
+use druid::widget::{
+    Axis, Container, Label, TabInfo, Tabs, TabsEdge, TabsPolicy, TabsTransition,
+    ViewSwitcher,
+};
 use druid::{
     commands,
     im::Vector,
@@ -17,7 +20,6 @@ use druid::{
     AppDelegate, AppLauncher, Color, Data, DelegateCtx, Env, Handled, Key, Lens, LensExt,
     LocalizedString, Menu, MenuItem, Selector, Widget, WidgetExt, WindowDesc, WindowId,
 };
-use druid::piet::Text;
 use text_buffer::{rebuild_rendered_text, RichTextRebuilder};
 
 /// Margin that is used for markdown formatted panel.
@@ -28,13 +30,11 @@ const OPEN_PREVIEW: Selector<usize> = Selector::new("notal-close-preview");
 const CLOSE_PREVIEW: Selector<usize> = Selector::new("notal-open-preview");
 const DEFAULT_WINDOW_SIZE: (f64, f64) = (800.0, 600.0);
 /// ### Default button color key.
-const COLOR_YELLOW: Color = Color::rgb8(247, 243, 150);
-const COLOR_BLUE: Color = Color::rgb8(126, 171, 199);
 const MENU_TEXT_SIZE: Key<f64> = Key::new("org.notal.label-font-size");
-const LABEL_BACKGROUND_COLOR: Key<Color> = Key::new("org.notal.label-background-color");
 const FONT: &[u8] = include_bytes!("../fonts/Inter.ttf");
 const FONT_KEY: Key<FontDescriptor> = Key::new("fonts.InterRegular");
 
+/// The main function of the app.
 fn main() {
     let window: WindowDesc<GeneralState> = WindowDesc::new(root_builder())
         .title(WINDOW_TITLE)
@@ -54,8 +54,8 @@ fn main() {
     };
 
     AppLauncher::with_window(window)
+        .localization_resources(vec!["tr-TR.ftl".to_string(),"en-GB.ftl".to_string()], String::from("./locales"))
         .configure_env(|env, _data| {
-            env.set(LABEL_BACKGROUND_COLOR, COLOR_BLUE);
             env.set(MENU_TEXT_SIZE, 12.0);
         })
         .log_to_console()
@@ -136,7 +136,6 @@ impl AppDelegate<GeneralState> for Delegate {
         }
     }
 }
-
 
 //TODO: Construct a Controller for Labels that handle the font and other properties of a label.
 struct LabelController;

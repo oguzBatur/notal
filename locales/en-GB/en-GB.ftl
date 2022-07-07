@@ -1,0 +1,1 @@
+label.welcome-message = Welcome to the best App 
