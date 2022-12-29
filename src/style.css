@@ -1,0 +1,132 @@
+* {
+  margin: 0;
+}
+
+#editor {
+  min-height: 100vh; 
+  width: 50%;
+  resize: none;
+  border: none;
+  padding: 25px;
+}
+
+#buffer {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: red;
+  width: 100%;
+  grid-column-start: 2;
+}
+
+#tabs {
+  display: flex;
+  background-color: gray;
+  grid-column-start: 2;
+  padding: 0px;
+}
+
+#buffercontainer {
+  width: 100%;
+  display: flex;
+}
+
+#dictionary-tab {
+  display:flex;
+  flex-direction: column;
+  grid-column-start: 1;
+  grid-row-start: 1;
+  grid-row-end: 3;
+  padding: 10px 0 0 0;
+  gap: 15px;
+  background: linear-gradient(90deg, #74f2ce, #7cffcb);
+}
+
+.dic-tab-item {
+  transition: 0.5s;
+  padding: 10px 10px 10px 30px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  
+}
+
+.dic-tab-item:hover {
+  background-color: grey;
+  
+}
+
+#preview {
+  min-height: 100vh;
+  width: 50%;
+  padding: 25px;
+  word-break: normal;
+  background-color: lightgray;
+}
+
+#preview > h1 {
+  color: turquoise;
+  margin-bottom: 15px;
+
+}
+/* Classes */
+.container {
+  background-color: blue;
+  display: grid;
+  grid-template-columns: .2fr 1fr;
+}
+
+.tab {
+  list-style: none;
+  background-color: wheat;
+  width: 10%;
+  padding: 2px;
+  border-left: black 1px solid;
+  border-right: black 1px solid;
+  border-bottom: black 1px solid;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+
+#menu {
+  height: 100vh;
+  width: 100vw;
+  background: linear-gradient(90deg, #74f2ce, #7cffcb);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+#notal-logo {
+  width: 8%;
+}
+
+#button-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 15%;
+}
+
+.menu-button {
+  background-color: lightgreen;
+  border: 0;
+  padding: 10px;
+  font-weight: bolder;
+  border-radius: 1px;
+  border: 1px solid black;
+  cursor: pointer;
+  transition: 0.5s;
+}
+
+.menu-button:hover {
+  background-color: green;
+  color: white;
+  border-color: white;
+
+}
+
